@@ -1,0 +1,345 @@
+Team 3200_1
+Gareth Jon Mallinson <22979781@student.uwa.edu.au>
+Dylan James Arto <23360073@student.uwa.edu.au>
+Luke Jean-Francois Stephen Waters <23487767@student.uwa.edu.au>
+Wai Kheng Goh <22886485@student.uwa.edu.au>
+Joel Thomas Brooker <23409801@student.uwa.edu.au>
+Dilan Preemesh Anand <23348892@student.uwa.edu.au>
+
+Team 3200_2
+Amir Saad Husain <23380159@student.uwa.edu.au>
+Cody John Howe <22575612@student.uwa.edu.au>
+Jarrad Glen McNeil <22895688@student.uwa.edu.au>
+Kiki Zhang <23621217@student.uwa.edu.au>
+Ann Phan <23101715@student.uwa.edu.au>
+Ethan Yong <23450844@student.uwa.edu.au>
+
+Team 3200_3
+Charles Peter Johnson <22236068@student.uwa.edu.au>
+Stefan Andonov <23374198@student.uwa.edu.au>
+Weihao Zeng <22242207@student.uwa.edu.au>
+Markus Noel Gopcevic <23422132@student.uwa.edu.au>
+Christopher McGill Walter <21834657@student.uwa.edu.au>
+Jayden Peter Hondris <23087371@student.uwa.edu.au>
+
+Team 3200_4
+Frederick Benjamin Leman <22976862@student.uwa.edu.au>
+John Edward Thomas Donaghy <21727658@student.uwa.edu.au>
+Susheel Shrishail Utagi <22502356@student.uwa.edu.au>
+Robert Arthur Beashel <23489302@student.uwa.edu.au>
+Lilee Ann Larsen <23101484@student.uwa.edu.au>
+Katrina Aoshi Yan <23422929@student.uwa.edu.au>
+
+Team 3200_5
+Joseph Patrick Newman <23334811@student.uwa.edu.au>
+Sigmund David Howe <23165388@student.uwa.edu.au>
+Jakem William Teasdale Pinchin <22705919@student.uwa.edu.au>
+Henry James Hewgill <23012728@student.uwa.edu.au>
+Arnav Santosh Dangmali <23408841@student.uwa.edu.au>
+Aifert Zhu Yuen Yet <23455873@student.uwa.edu.au>
+
+Team 3200_6
+Indra Samuel Gultom <23644267@student.uwa.edu.au>
+Fatimah Ali O Aljanobi <22992693@student.uwa.edu.au>
+Vanessa Mtakula <22838896@student.uwa.edu.au>
+Ye Huang <24019509@student.uwa.edu.au>
+Wenhan Li <23347608@student.uwa.edu.au>
+Justin Enrico Javier Arat <23080798@student.uwa.edu.au>
+
+Team 3200_7
+Jake Brandon Hesford <21683564@student.uwa.edu.au>
+Aaryan Haresh Sachdevani <23351863@student.uwa.edu.au>
+Ahamed Fadil Mohamed Fahim <23426094@student.uwa.edu.au>
+Matei Daniel Hepcal <23335344@student.uwa.edu.au>
+Leon Jude Thomas <23620426@student.uwa.edu.au>
+Christian Mark Wood <23062991@student.uwa.edu.au>
+
+Team 3200_8
+Carly May Scott <23359926@student.uwa.edu.au>
+Alan Lam <23625123@student.uwa.edu.au>
+Micaela Helen Blessas <23295523@student.uwa.edu.au>
+Zhihao Lin <23062249@student.uwa.edu.au>
+Kathryn Maree Burton <23315115@student.uwa.edu.au>
+Cian Daniel Atkinson <23131704@student.uwa.edu.au>
+
+Team 3200_9
+Victoria Felice <23484481@student.uwa.edu.au>
+Emily Ru Yi Ong <23374456@student.uwa.edu.au>
+Nabeel Ajmal Khan <22524461@student.uwa.edu.au>
+Dang Khoa Le <23020568@student.uwa.edu.au>
+Anay Bhargav Joshi <23364506@student.uwa.edu.au>
+Siyu Yao <23380883@student.uwa.edu.au>
+
+Team 3200_10
+Sarah Helen Pinelli <23419054@student.uwa.edu.au>
+Enrico Tionandra <23732436@student.uwa.edu.au>
+Benjamin Alexander Cooper <23251142@student.uwa.edu.au>
+Theresa Mary Needham <23348927@student.uwa.edu.au>
+Sreelajoyoti Mitra <23297983@student.uwa.edu.au>
+Ryan Zhi Yuan Lam <22716417@student.uwa.edu.au>
+
+Team 3200_11
+Chun Kit Lai <23687543@student.uwa.edu.au>
+Jack William Blackwood <23326698@student.uwa.edu.au>
+Finlay Kane O'Loughlin <23616047@student.uwa.edu.au>
+Yiu Xuan Lok <23171563@student.uwa.edu.au>
+Aidan Patrick Power <23422858@student.uwa.edu.au>
+Elijah McKenzie Mullens <23335907@student.uwa.edu.au>
+
+Team 3200_12
+Nicole Yung Shean Yong <22910797@student.uwa.edu.au>
+Mitchell Dean Otley <23475725@student.uwa.edu.au>
+Chi Wang <23218137@student.uwa.edu.au>
+Aarif  Marzuki Lamat <23628374@student.uwa.edu.au>
+Harry Robert Morrison <23403634@student.uwa.edu.au>
+Connor William Grayden <23349066@student.uwa.edu.au>
+
+Team 3200_13
+Jessica Anastacia Shindunata <23367247@student.uwa.edu.au>
+Colin Hiroshi Melville <23170781@student.uwa.edu.au>
+Pengde Shi <22857062@student.uwa.edu.au>
+Tin Chi Pang <23301921@student.uwa.edu.au>
+Leyi Chen <23442577@student.uwa.edu.au>
+Timothy Sheldon Zandi <23404819@student.uwa.edu.au>
+
+Team 3200_14
+Cameron Jack O'Neill <23340022@student.uwa.edu.au>
+Shuai Shao <23701834@student.uwa.edu.au>
+Vinita Kanwar Rathore <23147456@student.uwa.edu.au>
+Ryan Dorman <22502024@student.uwa.edu.au>
+Hai Ning Leow <23643117@student.uwa.edu.au>
+Paul Mutuma Maingi <23678458@student.uwa.edu.au>
+
+Team 3200_15
+Pei Hua Tan <23572893@student.uwa.edu.au>
+Matthew David Gordon Pfleger <23361516@student.uwa.edu.au>
+Jiaxin Tian <23116308@student.uwa.edu.au>
+Yunhao Jin <23950897@student.uwa.edu.au>
+Jessica Courtney Harcourt-Cooke <23403545@student.uwa.edu.au>
+Jia Qi Lam <23751337@student.uwa.edu.au>
+
+Team 3200_16
+James David Wigfield <23334375@student.uwa.edu.au>
+Lucy Teresa Dye <23197244@student.uwa.edu.au>
+Sersang Yangdon Ngedup <23599356@student.uwa.edu.au>
+Simon Richard Webster Eason <23389488@student.uwa.edu.au>
+Ryan Kingsley <22262196@student.uwa.edu.au>
+Kyle Raymond Brian Dunstall <23616029@student.uwa.edu.au>
+
+Team 3200_17
+Cameron Richard Hart <23390625@student.uwa.edu.au>
+Rondelyn Evelyn Labis Hanson <23086965@student.uwa.edu.au>
+Uways Naeem Minty <23416583@student.uwa.edu.au>
+Cynthia Liu <23387046@student.uwa.edu.au>
+Nathaniel Linsey Trew <23120643@student.uwa.edu.au>
+Shaden Suliman M Albalawi <23269191@student.uwa.edu.au>
+
+Team 3200_18
+Yiyang Chen <23429861@student.uwa.edu.au>
+Yifeng Dai <23625929@student.uwa.edu.au>
+Alithea Xuan Yi Low <23341388@student.uwa.edu.au>
+Chuen Yui Lam <23641633@student.uwa.edu.au>
+Kylan Paterson Gillmore <23614901@student.uwa.edu.au>
+Wei-Yue Selina Tan <23118632@student.uwa.edu.au>
+
+Team 3200_19
+Laurel Hoe Ling Chow <23387082@student.uwa.edu.au>
+Kar Yee Megan Lim <23690864@student.uwa.edu.au>
+Myla Hoang Do <23376234@student.uwa.edu.au>
+Spencer William Kinder <23449203@student.uwa.edu.au>
+Milan Pravin Bechar <23067714@student.uwa.edu.au>
+Jashandeepsingh Chhabda <21712878@student.uwa.edu.au>
+
+Team 3200_20
+Joshua Jason Mance <23420013@student.uwa.edu.au>
+Sophie Margaret Mowe <23197128@student.uwa.edu.au>
+Matthew James Booth <23073972@student.uwa.edu.au>
+Rishwanth Reddy Katherapalle <23463452@student.uwa.edu.au>
+Radhika Bhardwaj <23817367@student.uwa.edu.au>
+Blair Thomas Smith <23154502@student.uwa.edu.au>
+
+Team 3200_21
+Zarif Solaiman <23640056@student.uwa.edu.au>
+Ifeoluwa Oluwatimileyin Mejiuni <22979825@student.uwa.edu.au>
+Michael Sony Allen <23593643@student.uwa.edu.au>
+Johnson Che <23403302@student.uwa.edu.au>
+Christofle Valiant Sangkanpara <23197709@student.uwa.edu.au>
+Hongkang Xu <23993019@student.uwa.edu.au>
+
+Team 3200_22
+Sunyan Qin <23208949@student.uwa.edu.au>
+Jerusha Watson <23383597@student.uwa.edu.au>
+Venu Madhava Soma <23355662@student.uwa.edu.au>
+Lucca Sidey <23401014@student.uwa.edu.au>
+Taylah Lee Karran <23076096@student.uwa.edu.au>
+Aaron Jinchuh Chin <23286189@student.uwa.edu.au>
+
+Team 3200_23
+Chester Chatfield <23450728@student.uwa.edu.au>
+Jeremy Thomas Baird <22507349@student.uwa.edu.au>
+James Philip Clements Holdsworth <23127639@student.uwa.edu.au>
+Nina Cimesa <23328091@student.uwa.edu.au>
+Aarya Bhorra <23277271@student.uwa.edu.au>
+Dex Wu June <21988007@student.uwa.edu.au>
+
+Team 3200_24
+Jordan Rao <23128288@student.uwa.edu.au>
+Nicholas Ardi Mulyawan <23044774@student.uwa.edu.au>
+Mosleh Gehad Hassanein <23101312@student.uwa.edu.au>
+Zain Anuar Bin Zabidi <22459831@student.uwa.edu.au>
+Matthew Vasta <23420971@student.uwa.edu.au>
+Leo George McGill <23334544@student.uwa.edu.au>
+
+Team 3200_25
+Devarsh Jayendrabhai Patel <23614429@student.uwa.edu.au>
+Jansen Chuah <23123894@student.uwa.edu.au>
+Harry Komah <23262455@student.uwa.edu.au>
+Michael James Millar <23418094@student.uwa.edu.au>
+Peter Hilton Denby <21953544@student.uwa.edu.au>
+Libero Christian Piffaretti <23134294@student.uwa.edu.au>
+
+Team 3200_26
+Samuel Kai Jie Chew <22974799@student.uwa.edu.au>
+Davin Do <23451626@student.uwa.edu.au>
+Harrison Harun <23347644@student.uwa.edu.au>
+Mahit Gupta <23690265@student.uwa.edu.au>
+Radin Mansouri <23317548@student.uwa.edu.au>
+Nathan Robert Foley <23120741@student.uwa.edu.au>
+
+Team 3200_27
+Darcy Tremayne Oliver <23475912@student.uwa.edu.au>
+Adam Clive Nicholas Wyatt <23073201@student.uwa.edu.au>
+Olivia Marie Hanly <23331483@student.uwa.edu.au>
+Isabella Pruiti Rowe <23159504@student.uwa.edu.au>
+Zac Morris <23655195@student.uwa.edu.au>
+James Callum Dixon <22944843@student.uwa.edu.au>
+
+Team 3200_28
+Joe Thorpe <22999858@student.uwa.edu.au>
+Reilly Sutherland Evans <23615971@student.uwa.edu.au>
+Darryl Max <23477648@student.uwa.edu.au>
+Aaminah Irfan <23642166@student.uwa.edu.au>
+Giovanni Giampaolo <23395411@student.uwa.edu.au>
+Isobelle Louise Scott <23105336@student.uwa.edu.au>
+
+Team 3200_29
+Daniel Shane Jennings <23064976@student.uwa.edu.au>
+Lauren Hannah Pudney <23343513@student.uwa.edu.au>
+Harsh Kamrajbhai Chaudhari <23097928@student.uwa.edu.au>
+Liam Demb <23639838@student.uwa.edu.au>
+Sia Dubey <23066191@student.uwa.edu.au>
+Lingwan Peng <23478401@student.uwa.edu.au>
+
+Team 3200_30
+Jaidan Alexander Balea <23443804@student.uwa.edu.au>
+Daniel Aditya Raflein <23457938@student.uwa.edu.au>
+Ruby Isabel Wilner <23325824@student.uwa.edu.au>
+Emily Alexandra Martin <23415513@student.uwa.edu.au>
+Chunchignorov Buyanjargal <23201336@student.uwa.edu.au>
+Jiafong Ames Xiao <22029591@student.uwa.edu.au>
+
+Team 3200_31
+Cooper Lloyd Thompson <23621342@student.uwa.edu.au>
+Joshua James Cooper <23356909@student.uwa.edu.au>
+Brigitte Krystyna Gredziuk <23460936@student.uwa.edu.au>
+Umar Mohammed Shaheen <23357119@student.uwa.edu.au>
+Amoldeep Kaur Phull <23208223@student.uwa.edu.au>
+Le Cam Anh Nguyen <23043141@student.uwa.edu.au>
+
+Team 3200_32
+Farrel Dhammika Kurniawan <23057954@student.uwa.edu.au>
+Tate John Meinertz <23334455@student.uwa.edu.au>
+Martin Mitanoski <23385544@student.uwa.edu.au>
+Uzziah Gary Smith <23365656@student.uwa.edu.au>
+Hamid Nasiri <22957489@student.uwa.edu.au>
+Mitchel Wyatt Rocchi <22977896@student.uwa.edu.au>
+
+Team 3200_33
+Jericho Carreon Cura <23102622@student.uwa.edu.au>
+Lloyd Junghyeon Na <23433196@student.uwa.edu.au>
+Martin Evans <23621647@student.uwa.edu.au>
+Lei Huang <22831541@student.uwa.edu.au>
+Lisa Regina Cantu <23374376@student.uwa.edu.au>
+Meg Elizabeth Goody <23390643@student.uwa.edu.au>
+
+Team 3200_34
+Ben Samson Daniel <23416986@student.uwa.edu.au>
+Hemkrit Kshitij Ragoonath <23421038@student.uwa.edu.au>
+Chenglin Xie <23403966@student.uwa.edu.au>
+Paransh Rakeshkumar Patel <23434165@student.uwa.edu.au>
+Juan Jones Sean Shzeczha Lakonawa <23192082@student.uwa.edu.au>
+James Edmonston Frayne <23372032@student.uwa.edu.au>
+
+Team 3200_35
+Ashkaan Gaurav Singh <23352583@student.uwa.edu.au>
+Fanhua Zeng <23605914@student.uwa.edu.au>
+Connor Alexander Wallis <22506057@student.uwa.edu.au>
+Abdisalaan Ali Muhudin <23161121@student.uwa.edu.au>
+Songxin Sun <23466264@student.uwa.edu.au>
+Junyi Wu <22823318@student.uwa.edu.au>
+
+Team 3200_36
+Neha Pradeep Menon <23516355@student.uwa.edu.au>
+Zhanyi Li <24103639@student.uwa.edu.au>
+Samuel Blake Chambers <23443475@student.uwa.edu.au>
+Cameron James Morrison <23217417@student.uwa.edu.au>
+Hoiyen Sha <23671856@student.uwa.edu.au>
+Jeremy Boulter <22712171@student.uwa.edu.au>
+
+Team 3200_37
+Jack Alexander Langoulant <23344707@student.uwa.edu.au>
+Cohen Daniel Rafiq <23348918@student.uwa.edu.au>
+Joel Tresham Cornfield <23749925@student.uwa.edu.au>
+Lance Dave Olisco Basa <23420659@student.uwa.edu.au>
+Lewis Alexander Wood <23104581@student.uwa.edu.au>
+
+Team 3200_38
+Ciaran David Petrus Engelbrecht <23169641@student.uwa.edu.au>
+William Sydney Lodge <22980141@student.uwa.edu.au>
+William Forrest Stewart van den Wall Bake <23086983@student.uwa.edu.au>
+Shashwat Abrol <23482415@student.uwa.edu.au>
+Connor James Fernie <23443143@student.uwa.edu.au>
+Oliver John Dean <21307131@student.uwa.edu.au>
+
+Team 3200_39
+Jongwoo Jun <22763977@student.uwa.edu.au>
+Devarsh Arunbhai Patel <22964473@student.uwa.edu.au>
+Olivia Rose Morrison <23176135@student.uwa.edu.au>
+Safeer Imaad Karim <23263344@student.uwa.edu.au>
+Yichen Tang <23413154@student.uwa.edu.au>
+Rhianna Margaret Hepburn <23340238@student.uwa.edu.au>
+
+Team 3200_40
+Dheya El Hak Chiha <23720753@student.uwa.edu.au>
+Alexander Robert Hawking <23354512@student.uwa.edu.au>
+Natasha Isabelle Luci <23169104@student.uwa.edu.au>
+Meihua Li <24386354@student.uwa.edu.au>
+Min Thit <23375069@student.uwa.edu.au>
+
+Team 3200_41
+Edward Haoyu Wang <23405978@student.uwa.edu.au>
+Yi Liu <23768586@student.uwa.edu.au>
+Xiong Xu Sean Yeo <22969896@student.uwa.edu.au>
+Hengxiang Li <23640118@student.uwa.edu.au>
+Charles Aidan Watson <23196696@student.uwa.edu.au>
+
+Team 3200_42
+Sithum Thulnith Somarathna <23614803@student.uwa.edu.au>
+Aya Abdallah Ibrahim Bilal <22964393@student.uwa.edu.au>
+Zahra Ali Vink <23987684@student.uwa.edu.au>
+Daniel Benjamin Lindsay <23164864@student.uwa.edu.au>
+Luke Neville Griffiths <23125073@student.uwa.edu.au>
+
+Team 3200_43
+Matthew Kai Yung Chew <22974046@student.uwa.edu.au>
+Peter Cong Nguyen <22988723@student.uwa.edu.au>
+Andy Lee <23351433@student.uwa.edu.au>
+William Grant Johnson <21310345@student.uwa.edu.au>
+Joshua Domenic Trainer <23661719@student.uwa.edu.au>
+
+Team 3200_44
+Cheng Li <23468614@student.uwa.edu.au>
+Helen Yang <23072751@student.uwa.edu.au>
+Alex Jorge Barker <23152009@student.uwa.edu.au>
+Adam Sanath Hay <23069397@student.uwa.edu.au>
+Ansu Regmi  <23376904@student.uwa.edu.au>
