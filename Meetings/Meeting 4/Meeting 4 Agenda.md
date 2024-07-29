@@ -7,7 +7,7 @@ Venue: Online
 
 | Tasks                      | Sub Tasks                                                                                                                                                                          |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Reports                    | Confirmation of previous Minutes for meetings 2.1 and 3;                                                                                                                           |
-| Discussions/Clarifications | Project outline - Specifics of project and confirmation of Project plan; Discussion/Reminder of timesheet submissions.                                                             |
-| To Do                      | Agree to project plan/outline; Assign tasks/functions to be built to individuals based on outline; Setup and assign reports based on assigned tasks; Setup next/recurring meeting. |
+| Reports                    | Confirmation of previous Minutes for meetings 2.1 and 3<br>                                                                                                                           |
+| Discussions/Clarifications | Project outline <br> - Specifics of project and confirmation of Project plan <br> - i.e: Project Language, Project OCR tools e.t.c. <br> Discussion/Reminder of timesheet submissions.                                                             |
+| To Do                      | Agree to project plan/outline<br> Assign tasks/functions to be built to individuals based on outline<br> Setup and assign reports based on assigned tasks<br> Setup next/recurring meeting. |
 | Next Meeting               | Organise next meeting time and send through to Chris time for next meeting                                                                                                         |
