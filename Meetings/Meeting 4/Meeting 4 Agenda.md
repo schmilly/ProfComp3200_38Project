@@ -1,8 +1,13 @@
 Gary
+
 CITS3200 PROFESSIONAL COMPUTING
+
 MEETING 4 AGENDA
+
 Time: 19:00
+
 Date: 30/07/2024
+
 Venue: Online
 
 | Tasks                      | Sub Tasks                                                                                                                                                                          |
