@@ -5,12 +5,13 @@
 
 Attendance:
 - Connor
-- Will
+- Will Bake
 - Oliver
 - Cirian (via Zoom)
 
 Apologies:
 - Shashwat
+- Will Lodge
 ----
 
 ## Outline: <br>
