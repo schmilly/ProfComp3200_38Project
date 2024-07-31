@@ -13,8 +13,8 @@ OutputLocation = "./temp/"
 #   colArr: A list of columns bound co-ordinates in pair formats 
 #       i.e: [row1[rowStart,rowEnd],row2[rowStart,rowEnd]..e.t.c.]
 #   rowArr: a list of row bound co-ordinates in pair formats; Same as colArr
-#   Co-ordinates for colArr and rowArr:
-#   Based on pixels - top left pixel of the input image being equal to [0,0] and 1 unit = 1 pixel
+#   Notes: Co-ordinates for colArr and rowArr:
+#       - Based on pixels - top left pixel of the input image being equal to [0,0] and 1 unit = 1 pixel
 def cellularize_Page_colrow(ImageLocation: str,colAr: list,rowAr: list):
     #Verification TBD
     page = Image.open(r""+ImageLocation)
