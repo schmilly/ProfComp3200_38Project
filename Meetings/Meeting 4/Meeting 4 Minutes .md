@@ -1,4 +1,4 @@
-# **Meeting 4 Minutes**
+﻿# **Meeting 4 Minutes**
 
 **Date: 30/07/2024**<br>
 **Venue: Discord (Online)**
@@ -24,18 +24,18 @@ Absent:
 Move Minutes for meetings 2.1 and 3 be accepted 
 <br> **Moved:** William van den Wall Bake
 <br> **Seconded:** Connor
-<br> Unanmoisly passed
+<br> Unanimously passed
 
 ---
 
 ## Discussions:
 
 ### Item 2.1: Project Plan/Outline
-Accept basic draft of project plan as outlined in attachecd image
+Accept basic draft of project plan as outlined in attached image
 
 #### Item 2.1.1: OCR Tool to use
-- DIscussion of tesseract as potential tool?
-- Tesseract decided as starting point for core functioniltiy
+- Discussion of tesseract as potential tool?
+- Tesseract decided as starting point for core functionality
 
 #### Item 2.1.2: Language to use
 - Core Lang: Python decided
@@ -45,14 +45,14 @@ Accept basic draft of project plan as outlined in attachecd image
 **Moved:** William van den Wall Bake <br>
 **Seconded:** Connor
 <br>
-Unanmoisly passed
+Unanimously passed
 
 
 ### Item 2.3: Discussion Points for client next meeting
 - Licensing
 - Get his approval of project plan
-- Get his approval of Requirments
-	- $100 assignment of priorities for requirments
+- Get his approval of Requirements
+	- $100 assignment of priorities for requirements
 - Scope (?)
 - Skills and resources Audit
 	- See "To do" section for skills and resources
@@ -69,9 +69,9 @@ Unanmoisly passed
 cell as image
 - Connor (4->5): Apply OCR*
 - Cirian (5->6): Put Text into Table*
-- Oliver: General GuI
+- Oliver: General GUI
 
-\* = Will require collaberation with each other to do
+\* = Will require collaboration with each other to do
 
 **Moved:** William van den Wall Bake <br>
 **Seconded:** Will Lodge
@@ -81,7 +81,7 @@ cell as image
 
 - Everyone come back next meeting with report RE: functions
 
-### Item 3.3: Setting up Project Requirments
+### Item 3.3: Setting up Project Requirements
 
 - Agree to wait until next meeting before setting up tests
 
@@ -112,7 +112,7 @@ Seconder: William Lodge
 
 ### Item 4.2: Client meeting time
 - Proposed time: Friday 5:15pm ~ Online 
-	- Backup: Next week sometime ~ **Monday 5pm** ~ Send through budget questions for assesing client value
+	- Backup: Next week sometime ~ **Monday 5pm** ~ Send through budget questions for assessing client value
 - Send to client Details
 
 Move: William vdWB<br>
@@ -125,7 +125,7 @@ Second: Shashwat
 
 ## Action Items:
 - Reports:
-	- Will vdWB - Meeting 4 minutes & Celluraise Image function
+	- Will vdWB - Meeting 4 minutes & Cellularize Image function
 	- Will Lodge - PDF Page to Image function
 	- Shashwat - User Inputs/Divides up Table
 	- Connor & Cirian - Apply OCR & Put Text into Table
