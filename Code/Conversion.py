@@ -22,7 +22,7 @@ def convert_pdf_to_images(pdf_path, output_folder, image_format='png'):
     
     return image_files
 
-# Example usage - this will be changed when the GUI is established so we can drop the pdf file in, and will need integration.
+# Example usage - this will be changed when the GUI is established so we can drop the pdf file in, and will need integration. (In README need homebrew + poppler installed).
 
 #  if __name__ == "__main__":
 #     pdf_path = 'path_to_your_pdf.pdf'  # Replace with the path to your PDF file
