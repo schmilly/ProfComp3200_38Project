@@ -2,7 +2,7 @@ import sys
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, 
                              QFileDialog, QTableWidget, QTableWidgetItem, QProgressBar, 
                              QComboBox, QHBoxLayout, QFrame, QTextEdit, QSplitter, QSizePolicy,
-                             QMenuBar, QMenu, QAction, QInputDialog)
+                             QMenuBar, QMenu, QAction)
 from PyQt5.QtCore import Qt, QMimeData
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QPalette, QColor, QPixmap
 import ocr
@@ -14,89 +14,111 @@ class OCRApp(QWidget):
         self.initUI()
         
     def initUI(self):
-        self.setWindowTitle('OCR PDF to Table - Windows 95 Style')
+        self.setWindowTitle('OCR PDF to Table')
         self.setGeometry(100, 100, 1200, 800)
         self.setAcceptDrops(True)
-        
-        main_layout = QVBoxLayout()
 
+        main_layout = QVBoxLayout()
+        self.initMenuBar(main_layout)
+        self.initTopControls(main_layout)
+        self.initSplitter(main_layout)
+        self.initProgressBars(main_layout)
+        self.initTable(main_layout)
+        
+        self.setLayout(main_layout)
+        self.set_dark_mode(self.text_size)
+
+    def initMenuBar(self, layout):
+        menu_layout = QHBoxLayout()
+        
         # Menu bar
         self.menuBar = QMenuBar(self)
         self.settingsMenu = QMenu("Settings", self)
         self.menuBar.addMenu(self.settingsMenu)
         
-        # Text Size Submenu
-        self.textSizeMenu = QMenu("Change Text Size", self)
-        self.settingsMenu.addMenu(self.textSizeMenu)
+        self.textSizeMenu = self.addSubMenu(self.settingsMenu, "Change Text Size", 
+                                            [("Small", 20), ("Medium", 24), ("Large", 30)], 
+                                            self.change_text_size)
         
-        self.smallTextAction = QAction('Small', self)
-        self.mediumTextAction = QAction('Medium', self)
-        self.largeTextAction = QAction('Large', self)
+        self.addMenuAction(self.settingsMenu, "Light Mode", lambda: self.set_light_mode(self.text_size))
+        self.addMenuAction(self.settingsMenu, "Dark Mode", lambda: self.set_dark_mode(self.text_size))
         
-        self.textSizeMenu.addAction(self.smallTextAction)
-        self.textSizeMenu.addAction(self.mediumTextAction)
-        self.textSizeMenu.addAction(self.largeTextAction)
-        
-        self.smallTextAction.triggered.connect(lambda: self.change_text_size(20))
-        self.mediumTextAction.triggered.connect(lambda: self.change_text_size(24))
-        self.largeTextAction.triggered.connect(lambda: self.change_text_size(30))
+        menu_layout.addWidget(self.menuBar)
+        layout.addLayout(menu_layout)
 
-        # Additional actions can be added here
-        self.lightModeAction = QAction('Light Mode', self)
-        self.darkModeAction = QAction('Dark Mode', self)
-        self.settingsMenu.addAction(self.lightModeAction)
-        self.settingsMenu.addAction(self.darkModeAction)
-        self.lightModeAction.triggered.connect(lambda: self.set_light_mode(self.text_size))
-        self.darkModeAction.triggered.connect(lambda: self.set_dark_mode(self.text_size))
+    def addSubMenu(self, parentMenu, title, actions, callback):
+        subMenu = QMenu(title, self)
+        parentMenu.addMenu(subMenu)
+        for name, size in actions:
+            action = QAction(name, self)
+            action.triggered.connect(lambda _, s=size: callback(s))
+            subMenu.addAction(action)
+        return subMenu
 
-        main_layout.setMenuBar(self.menuBar)
+    def addMenuAction(self, menu, title, callback):
+        action = QAction(title, self)
+        action.triggered.connect(callback)
+        menu.addAction(action)
+
+    def initTopControls(self, layout):
+        control_layout = QHBoxLayout()
         
         self.label = QLabel('Drag and Drop a PDF file or use the button to browse')
-        main_layout.addWidget(self.label)
+        control_layout.addWidget(self.label)
+
+        self.button = self.createButton('Browse PDF File', self.browse_file, QSizePolicy.Expanding, 50)
+        control_layout.addWidget(self.button)
         
-        self.button = QPushButton('Browse PDF File')
-        self.button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.button.setFixedHeight(50)
-        self.button.clicked.connect(self.browse_file)
-        main_layout.addWidget(self.button)
-        
+        layout.addLayout(control_layout)
+
+    def createButton(self, text, callback, policy, height):
+        button = QPushButton(text)
+        button.setSizePolicy(policy, QSizePolicy.Fixed)
+        button.setFixedHeight(height)
+        button.clicked.connect(callback)
+        return button
+
+    def initSplitter(self, layout):
+        splitter = QSplitter(Qt.Horizontal)
+        self.imagePreview = self.createPreviewLabel('PDF/Image Preview')
+        self.textOutput = self.createTextEdit('CSV Text Output')
+
+        splitter.addWidget(self.imagePreview)
+        splitter.addWidget(self.textOutput)
+        layout.addWidget(splitter)
+
+    def createPreviewLabel(self, text):
+        label = QLabel(text)
+        label.setFrameShape(QFrame.Box)
+        label.setScaledContents(True)
+        label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        return label
+
+    def createTextEdit(self, text):
+        textEdit = QTextEdit(text)
+        textEdit.setFrameShape(QFrame.Box)
+        textEdit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        return textEdit
+
+    def initProgressBars(self, layout):
         self.totalProgressBar = QProgressBar()
         self.totalProgressBar.setVisible(False)
-        main_layout.addWidget(self.totalProgressBar)
-
+        layout.addWidget(self.totalProgressBar)
         self.progressBars = []
 
-        splitter = QSplitter(Qt.Horizontal)
-        
-        self.imagePreview = QLabel('PDF/Image Preview')
-        self.imagePreview.setFrameShape(QFrame.Box)
-        self.imagePreview.setScaledContents(True)
-        self.imagePreview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        splitter.addWidget(self.imagePreview)
-        
-        self.textOutput = QTextEdit('CSV Text Output')
-        self.textOutput.setFrameShape(QFrame.Box)
-        self.textOutput.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        splitter.addWidget(self.textOutput)
-
-        main_layout.addWidget(splitter)
-        
+    def initTable(self, layout):
         self.comboBox = QComboBox()
         self.comboBox.addItem('Table 1')
         self.comboBox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        main_layout.addWidget(self.comboBox)
-        
+        layout.addWidget(self.comboBox)
+
         self.tableWidget = QTableWidget()
         self.tableWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        main_layout.addWidget(self.tableWidget)
-        
+        layout.addWidget(self.tableWidget)
+
         self.timeLabel = QLabel('Elapsed Time: 0.00 seconds')
         self.timeLabel.setVisible(False)
-        main_layout.addWidget(self.timeLabel)
-        
-        self.setLayout(main_layout)
-        
-        self.set_dark_mode(self.text_size)
+        layout.addWidget(self.timeLabel)
 
     def change_text_size(self, size):
         self.text_size = size
@@ -180,7 +202,7 @@ class OCRApp(QWidget):
         for url in event.mimeData().urls():
             if url.isLocalFile():
                 file_path = url.toLocalFile()
-                self.process_file(file_path)
+                self.process_files([file_path])
 
     def browse_file(self):
         file_paths, _ = QFileDialog.getOpenFileNames(self, "Open PDF Files", "", "PDF Files (*.pdf);;All Files (*)")
