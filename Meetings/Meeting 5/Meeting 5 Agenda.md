@@ -3,7 +3,7 @@
 
 ## MEETING 5 AGENDA
 
-### Time: 18:30
+### Time: 19:00
 ### Date: 06/08/2024
 
 Venue: Online
