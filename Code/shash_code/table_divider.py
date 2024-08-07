@@ -1,7 +1,6 @@
-# table_divider_app.py
+# table_divider.py
 import tkinter as tk
 from PIL import Image, ImageTk
-from pdf_to_image import pdf_to_images
 
 class TableDividerApp:
     def __init__(self, root, images):
