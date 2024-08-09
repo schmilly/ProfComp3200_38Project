@@ -37,3 +37,16 @@ with open(output_csv, mode='w', newline='') as file:
             cell_text = table_data[row_index].get(col_index, "")
             row.append(cell_text)
         writer.writerow(row)
+
+
+#############
+
+# max_columns = max(max(cols.keys()) for cols in table_data.values())
+
+# # Add a check to ensure table_data is not empty
+# if table_data:
+#     max_columns = max(max(cols.keys()) for cols in table_data.values())
+# else:
+#     print("No data found. Exiting.")
+#     max_columns = 0  # Or handle this case as needed
+#     return
