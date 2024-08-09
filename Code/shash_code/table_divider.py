@@ -1,6 +1,6 @@
+# table_divider.py
 import tkinter as tk
 from PIL import Image, ImageTk
-from pdf_to_images import pdf_to_images
 
 class TableDividerApp:
     def __init__(self, root, images):
@@ -19,6 +19,15 @@ class TableDividerApp:
 
         self.canvas.bind("<Button-1>", self.on_click)
         self.canvas.bind("<Button-3>", self.on_right_click)
+        
+        next_button = tk.Button(self.root, text="Next Page", command=self.next_page)
+        next_button.pack(side=tk.LEFT)
+        
+        prev_button = tk.Button(self.root, text="Previous Page", command=self.prev_page)
+        prev_button.pack(side=tk.LEFT)
+        
+        save_button = tk.Button(self.root, text="Save Coordinates", command=self.save_coordinates)
+        save_button.pack(side=tk.LEFT)
 
     def show_image(self, image):
         self.tk_image = ImageTk.PhotoImage(image)
@@ -41,19 +50,19 @@ class TableDividerApp:
         x2, y2 = self.rect_coords[1]
         self.canvas.create_rectangle(x1, y1, x2, y2, outline='red', tag="rect")
         print(f"Rectangle from ({x1}, {y1}) to ({x2}, {y2})")
-        
-    def extract_cells(self):
-        image = self.images[self.current_image]
-        cells = []
-        for coords in self.cell_coords:
-            x1, y1 = coords[0]
-            x2, y2 = coords[1]
-            cell = image.crop((x1, y1, x2, y2))
-            cells.append(cell)
-        return cells
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    images = pdf_to_images('sample.pdf')
-    app = TableDividerApp(root, images)
-    root.mainloop()
+    def next_page(self):
+        if self.current_image < len(self.images) - 1:
+            self.current_image += 1
+            self.show_image(self.images[self.current_image])
+
+    def prev_page(self):
+        if self.current_image > 0:
+            self.current_image -= 1
+            self.show_image(self.images[self.current_image])
+
+    def save_coordinates(self):
+        with open('cell_coordinates.txt', 'w') as file:
+            for coords in self.cell_coords:
+                file.write(f"{coords}\n")
+        print("Coordinates saved.")
