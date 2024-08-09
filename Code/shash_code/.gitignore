@@ -1,0 +1,11 @@
+# Ignore Python virtual environment
+myenv/
+
+# Ignore IDE and editor files
+.vscode/
+.idea/
+
+# Ignore OS-specific files
+*.DS_Store
+*.log
+*.tmp
