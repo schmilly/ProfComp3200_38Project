@@ -1,5 +1,4 @@
 import sys
-import subprocess
 import os
 import mimetypes
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, 
@@ -9,7 +8,55 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QL
 from PyQt5.QtCore import Qt, QMimeData
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QPalette, QColor, QPixmap
 from pdf2image import convert_from_path
+from pdf_to_image import pdf_to_images
 import ocr
+
+class FileDropButton(QPushButton):
+    def __init__(self, title, parent=None):
+        super().__init__(title, parent)
+        self.setAcceptDrops(True)
+        self.default_image = QPixmap()  # Placeholder for default image
+        self.dragged_image = QPixmap()  # Placeholder for image when file is dragged onto button
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            if all(url.isLocalFile() and (url.toLocalFile().endswith('.pdf') or url.toLocalFile().endswith('.png')) for url in urls):
+                event.acceptProposedAction()
+                self.update_button_image(self.dragged_image)
+            else:
+                event.ignore()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self.update_button_image(self.default_image)
+
+    def dropEvent(self, event: QDropEvent):
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            valid_files = []
+            for url in urls:
+                if url.isLocalFile():
+                    file_path = url.toLocalFile()
+                    mime_type, _ = mimetypes.guess_type(file_path)
+                    if mime_type in ['application/pdf', 'image/png']:
+                        valid_files.append(file_path)
+            
+            if valid_files:
+                self.parent().process_files(valid_files)
+            else:
+                self.parent().show_error_message("Invalid file(s). Please drop PDF or PNG files only.")
+            self.update_button_image(self.default_image)
+        else:
+            self.parent().show_error_message("Invalid file(s). Please drop local files only.")
+
+    def update_button_image(self, pixmap):
+        if pixmap.isNull():
+            self.setText("Drop File Here")
+        else:
+            self.setIcon(pixmap)
+
 
 class OCRApp(QWidget):
     def __init__(self):
@@ -20,7 +67,6 @@ class OCRApp(QWidget):
     def initUI(self):
         self.setWindowTitle('OCR PDF to Table')
         self.setGeometry(100, 100, 1200, 800)
-        self.setAcceptDrops(True)
 
         main_layout = QVBoxLayout()
         self.initMenuBar(main_layout)
@@ -50,6 +96,10 @@ class OCRApp(QWidget):
         menu_layout.addWidget(self.menuBar)
         layout.addLayout(menu_layout)
 
+    def initTableDivider(self):
+        self.tableDividerApp = TableDividerApp(image_paths, self)
+        self.layout().addWidget(self.tableDividerApp)
+
     def addSubMenu(self, parentMenu, title, actions, callback):
         subMenu = QMenu(title, self)
         parentMenu.addMenu(subMenu)
@@ -67,20 +117,17 @@ class OCRApp(QWidget):
     def initTopControls(self, layout):
         control_layout = QHBoxLayout()
         
-        self.label = QLabel('Drag and Drop a PDF file or use the button to browse')
+        self.label = QLabel('Drag and Drop a PDF or PNG file onto the button below:')
         control_layout.addWidget(self.label)
 
-        self.button = self.createButton('Browse PDF File', self.browse_file, QSizePolicy.Expanding, 50)
-        control_layout.addWidget(self.button)
+        self.dropButton = FileDropButton('Drop File Here', self)
+        self.dropButton.setFixedSize(200, 100)
+        self.dropButton.default_image = QPixmap("default_image.png")  # Placeholder for default image file path
+        self.dropButton.dragged_image = QPixmap("dragged_image.png")  # Placeholder for image when dragging onto button
+        self.dropButton.update_button_image(self.dropButton.default_image)
+        control_layout.addWidget(self.dropButton)
         
         layout.addLayout(control_layout)
-
-    def createButton(self, text, callback, policy, height):
-        button = QPushButton(text)
-        button.setSizePolicy(policy, QSizePolicy.Fixed)
-        button.setFixedHeight(height)
-        button.clicked.connect(callback)
-        return button
 
     def initSplitter(self, layout):
         splitter = QSplitter(Qt.Horizontal)
@@ -197,47 +244,7 @@ class OCRApp(QWidget):
                 border: 2px inset #fff;
             }}
         """)
-
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        if event.mimeData().hasUrls():
-            urls = event.mimeData().urls()
-            if all(url.isLocalFile() and url.toLocalFile().endswith('.pdf') for url in urls):
-                event.acceptProposedAction()
-            else:
-                event.ignore()
-        else:
-            event.ignore()
-
-    def dropEvent(self, event: QDropEvent):
-        if event.mimeData().hasUrls():
-            urls = event.mimeData().urls()
-            valid_files = []
-            for url in urls:
-                if url.isLocalFile():
-                    file_path = url.toLocalFile()
-                    mime_type, _ = mimetypes.guess_type(file_path)
-                    if mime_type == 'application/pdf' and file_path.endswith('.pdf'):
-                        valid_files.append(file_path)
-            
-            if valid_files:
-                self.process_files(valid_files)
-            else:
-                self.show_error_message("Invalid file(s). Please drop PDF files only.")
-        else:
-            self.show_error_message("Invalid file(s). Please drop local files only.")
-
-    def show_error_message(self, message):
-        error_dialog = QMessageBox()
-        error_dialog.setIcon(QMessageBox.Warning)
-        error_dialog.setText(message)
-        error_dialog.setWindowTitle("Invalid File")
-        error_dialog.exec_()
-
-    def browse_file(self):
-        file_paths, _ = QFileDialog.getOpenFileNames(self, "Open PDF Files", "", "PDF Files (*.pdf);;All Files (*)")
-        if file_paths:
-            self.process_files(file_paths)
-
+        
     def process_files(self, file_paths):
         self.totalProgressBar.setVisible(True)
         self.totalProgressBar.setValue(0)
@@ -255,17 +262,20 @@ class OCRApp(QWidget):
             self.layout().insertWidget(self.layout().count() - 3, progressBar)  # Insert above comboBox, tableWidget, and timeLabel
             self.progressBars.append(progressBar)
 
-            # Convert PDF to images
-            output_folder = 'output_images'
-            images = self.convert_pdf_to_images(file_path, output_folder)
-            
-            if images:
-                pixmap = QPixmap(images[0])
+            if file_path.endswith('.pdf'):
+                # Convert PDF to images
+                images = pdf_to_images(file_path)
+                if images:
+                    self.show_images(images)
+                
+                # Load OCR and table extraction on the first image
+                tables, elapsed_time = ocr.ocr_pdf_to_table(file_path)
+            elif file_path.endswith('.png'):
+                # Simply display the PNG image
+                pixmap = QPixmap(file_path)
                 self.imagePreview.setPixmap(pixmap)
-            
-            # Load image preview
-            tables, elapsed_time = ocr.ocr_pdf_to_table(file_path)
-            
+                tables, elapsed_time = [], 0
+
             progressBar.setValue(100)
             completed_files += 1
             self.totalProgressBar.setValue((completed_files / total_files) * 100)
@@ -276,11 +286,27 @@ class OCRApp(QWidget):
             
             self.timeLabel.setText(f'Elapsed Time: {elapsed_time:.2f} seconds')
             self.timeLabel.setVisible(True)
-            self.display_table(tables[0])
 
-            # Display CSV text output
-            csv_text = tables[0].to_csv(index=False)
-            self.textOutput.setPlainText(csv_text)
+            if tables:
+                self.display_table(tables[0])
+
+            # Display CSV text output if any tables were extracted
+            if tables:
+                csv_text = tables[0].to_csv(index=False)
+                self.textOutput.setPlainText(csv_text)
+            else:
+                self.textOutput.clear()
+
+    def show_images(self, images):
+        if images:
+            pixmap = self.pil2pixmap(images[0])  # Display the first image
+            self.imagePreview.setPixmap(pixmap)
+
+    def pil2pixmap(self, image):
+        image = image.convert("RGBA")
+        data = image.tobytes("raw", "RGBA")
+        qimage = QImage(data, image.width, image.height, QImage.Format_RGBA8888)
+        return QPixmap.fromImage(qimage)
 
     def convert_pdf_to_images(self, pdf_path, output_folder, image_format='png'):
         os.makedirs(output_folder, exist_ok=True)
@@ -298,6 +324,13 @@ class OCRApp(QWidget):
         for i in range(table.shape[0]):
             for j in range(table.shape[1]):
                 self.tableWidget.setItem(i, j, QTableWidgetItem(str(table.iat[i, j])))
+
+    def show_error_message(self, message):
+        error_dialog = QMessageBox()
+        error_dialog.setIcon(QMessageBox.Warning)
+        error_dialog.setText(message)
+        error_dialog.setWindowTitle("Invalid File")
+        error_dialog.exec_()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
