@@ -1,0 +1,7 @@
+Table Detection:
+
+= Run through first part of TableNet (mask with each cell or text)
+= Run through CV2 Line Detection
+= For long contigous lines set as Potential Table bouandaries
+= Put such boundaries into co-ord system
+= Provide suggested table to user as idea of what it looks like
