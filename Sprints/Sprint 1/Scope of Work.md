@@ -30,10 +30,11 @@ Client, Developers
 
 <br>**MILESTONES**
 
-- 30/07 Release of RAD Template (Project Management)
-- TBA Team RADs Due (Developers)
-- TBA Second Draft of team RADs due (Developers)
-- TBA RAD Review Presentation Deadline
+- 14/08/24 Sprint 1
+- 18/09/24 Sprint 2
+- 14/10/24 Unit deadline
+- 16/10/24 Sprint 3
+
 
 ## 1.0 General Goals (William van den Wall Bake)
 
