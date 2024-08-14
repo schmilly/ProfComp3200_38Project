@@ -1,0 +1,3 @@
+- Table Detection accuracy/troubles
+- Document hand over ~ Send through to Chris
+- Progress update ~ estimate of completion amount.
