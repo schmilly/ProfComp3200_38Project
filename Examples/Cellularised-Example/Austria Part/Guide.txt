@@ -1,0 +1,11 @@
+#From Example Page in Example Folder image
+
+#Commands to run:
+
+colAr=[[402,471],[471,593],[593,719],[719,840],[840,962]]
+rowAr=[[310,440],[438,486]]
+Cellularize.cellularize_Page_colrow("/home/schmilly/ProfComp3200_38Project/Examples/PageExport.png",colAr,rowAr)
+
+#Output from function should be list; with file names; In this example folder would be:
+# ['./temp/page_vhmuxqx_0_0.png', './temp/page_vhmuxqx_1_0.png', './temp/page_vhmuxqx_0_1.png', './temp/page_vhmuxqx_1_1.png', './temp/page_vhmuxqx_0_2.png', './temp/page_vhmuxqx_1_2.png', './temp/page_vhmuxqx_0_3.png', './temp/page_vhmuxqx_1_3.png', './temp/page_vhmuxqx_0_4.png', './temp/page_vhmuxqx_1_4.png']
+#Output after running all images via OCR is the CSV in same folder
