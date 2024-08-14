@@ -9,7 +9,15 @@ import cv2
 import numpy as np
 
 # Load PaddleOCR model and processor
-ocr = PaddleOCR(use_angle_cls=True, lang='en')
+ocr = PaddleOCR(use_angle_cls=True, lang='en',rec_model_dir='en_PP-OCRv4_rec',
+    version='PP-OCRv4',
+    det_db_thresh=0.35,
+    det_db_box_thresh=0.45,
+    det_db_unclip_ratio=1.8,
+    cls_thresh=0.95,
+    use_space_char=True,
+    rec_image_shape='3, 48, 320',
+    det_limit_side_len=960)
 import logging
 
 # Set all existing loggers to WARNING
@@ -135,10 +143,13 @@ for filename in os.listdir(image_directory):
         # Perform OCR using Tesseract
         # text = pytesseract.image_to_string(processed_image, config='--oem 1 --psm 6')
         # cleaned_text = clean_text(text)
-        
+
+        if col_index == 0 and final_confidence == 0:
+            continue
+
         total += 1
         
-        if final_confidence < 0.65:
+        if final_confidence < 0.80:
             bad += 1
             print(f"Review needed for {filename}: {final_text} (Confidence: {final_confidence})")
             # To verify text via GUI manually for low confidence values
@@ -163,5 +174,5 @@ with open(output_csv, mode='w', newline='') as file:
             cell_text = table_data[row_index].get(col_index, "")
             row.append(cell_text)
         writer.writerow(row)
-print(f"percentage less than 65 confidence score is {bad/total*100}%")
+print(f"percentage less than 65 confidence score is {bad/total*100}% with {bad} possibly wrong")
 print("OCR verification complete. Results saved to CSV.")
