@@ -15,20 +15,20 @@ def find_peaks(axis,luminosity,pointgap):
     # Find peaks: we consider a point as a peak if it's lower than its neighbors
     peaks = []
     error_count=0
-    for i in range(1, len(avg_luminosity) - 1):
-        #print(avg_luminosity[i])
+    for i in range(1, len(avg_luminosity) - 1): 
+       
 
         inRange = False
 
         for iasa in range(1, pointgap):
             try:
-                if avg_luminosity[i] > avg_luminosity[i - iasa] and avg_luminosity[i] > avg_luminosity[i + iasa]:
+                if avg_luminosity[i] < avg_luminosity[i - iasa] and avg_luminosity[i] < avg_luminosity[i + iasa]:
                     inRange = True
                 else:
                     inRange = False
                     break
             except:
-                error_count = error_count + 1
+                error_count = error_count + 1 
         if (inRange):
             peaks.append(i)
 
@@ -41,32 +41,22 @@ def find_troughs(axis,luminosity,pointgap):
     # Find troughs: we consider a point as a trough if it's lower than its neighbors
     troughs = []
     error_count=0
-    rollingaverage = [avg_luminosity[0:pointgap*2]]
     for i in range(1, len(avg_luminosity) - 1):
         #print(avg_luminosity[i])
-
-        if i > pointgap*2:
-            rollingaverage = rollingaverage[:-1]
-            try:
-                rollingaverage.append(avg_luminosity[i+pointgap])
-            except:
-                print("Error outside average")
-
+        
         inRange = False
 
-
+        #print(avg_luminosity[i])
         for iasa in range(1, pointgap):
+
             try:
                 if avg_luminosity[i] > avg_luminosity[i - iasa] and avg_luminosity[i] > avg_luminosity[i + iasa]:
-                    print(str(mean(rollingaverage)-avg_luminosity[i]))
-                    if mean(rollingaverage) - avg_luminosity[i] > 10:
-                        inRange = True
+                    inRange = True
                 else:
-                    if mean(rollingaverage) - avg_luminosity[i] > 30:
-                        inRange = True
+                    inRange = False
                     break
             except:
-                error_count = error_count + 1
+                error_count = error_count + 1 
         if (inRange):
             troughs.append(i)
 
@@ -92,7 +82,7 @@ def draw_vertical_lines(image, lines):
 
 
 
-def findTable(image_path="Image/Path/here",HorizontalState = "border",VerticalState = "border",horizontalgap = 15/2077, verticalgap = 80/1474):
+def findTable(image_path="Image/Path/here",HorizontalState = "border",VerticalState = "border",horizontalgap = 20/2077, verticalgap = 80/1474):
 
     #Gap between peaks/troughs before consider new peak/trough
 
@@ -101,11 +91,11 @@ def findTable(image_path="Image/Path/here",HorizontalState = "border",VerticalSt
     wid, hgt = image.size
 
     luminosity = calculate_luminosity(image)
-    if (HorizontalState == "borderless"):
+    if (HorizontalState == "border"):
         Horizontal = find_peaks(1,luminosity,round(hgt*horizontalgap))
     else:
         Horizontal = find_troughs(1,luminosity,round(hgt*horizontalgap)) 
-    if (VerticalState == "borderless"):
+    if (VerticalState == "border"):
         Vertical = find_peaks(0,luminosity,round(wid*verticalgap))
     else:
         Vertical = find_troughs(0,luminosity,round(wid*verticalgap)) 
@@ -114,11 +104,9 @@ def findTable(image_path="Image/Path/here",HorizontalState = "border",VerticalSt
     result_image = draw_lines(image, Horizontal) 
     final_image = draw_vertical_lines(image, Vertical)
 
-    #final_image.save('output_image_with_lines.png')
+    final_image.save('output_image_with_lines.png')
     final_image.show()
 
     return [Horizontal,Vertical]
 
-def convert_to_pairs(lst):
-    # Create a list of lists where each sublist contains two consecutive elements
-    return [[lst[i], lst[i + 1]] for i in range(len(lst) - 1)]
+
