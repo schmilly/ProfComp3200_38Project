@@ -1,18 +1,18 @@
-﻿# **Meeting 5 Minutes**
+﻿# **Meeting 6 Minutes**
 
-**Date: 06/08/2024**<br>
+**Date: 13/08/2024**<br>
 **Venue: Discord (Online)**
 
 Attendance:
 - Ciaran David Petrus Engelbrecht <23169641@student.uwa.edu.au>
-
 - William Forrest Stewart van den Wall Bake <23086983@student.uwa.edu.au>
 - Shashwat Abrol <23482415@student.uwa.edu.au>
 - Connor James Fernie <23443143@student.uwa.edu.au>
 - Oliver John Dean <21307131@student.uwa.edu.au>
+- William Sydney Lodge <22980141@student.uwa.edu.au>
 
 Apologies: 
-- William Sydney Lodge <22980141@student.uwa.edu.au>
+- N/A
 
 
 ## Meeting Opened: 7:04pm 
@@ -22,26 +22,26 @@ Apologies:
 ## Reports
 
 ### Item 1.1: Previous Minutes
-Move Minutes for meetings 4 be accepted 
+Move Minutes for meetings 5 be accepted 
 <br> **Moved:** William van den Wall Bake
-<br> **Seconded:** Connor
+<br> **Seconded:** Ciaran
 <br> Unanimously passed
 
 ### Item 1.2: Progress Reports
-- Will vdWB ~ Cellularization Function
-  - Basically Done; Able to move on to other functions
-  - Will work on Image sharpening and defining
-- Will Lodge ~ PDF Page to Image function
-	- Notes Provided Pre-meeting: <br> *"all is well w it, just need to figure out the GUI situation so can integrate with it…. As of right now you need to give a PDF file path (of the PDF to be changed) and an output folder path for the converted image."*
-- Shashwat ~ User Inputs/Divides up Table function
-  - Making good progress with function. Working away with Tkinter
+- Will vdWB ~ Automatic Table Detection investigation
+  - Not not achieving required results, requires further investigation
+  - Will need to have a conversation with client about this requirement
+  - Distribution of pixels in cells may be a better way to approach
+- Shashwat ~ UI/Table Build development progress
+  - Going well; focusing on main functions, multiple pages, user can draw rectangles covering the tables and saves as PNG
 - Connor & Cirian ~ Apply OCR & Put Text into Table function
-	- Connor: Success with OCR Limited - looking in images enhancement with sharpness/brightness contrast stuff
-	- Ciaran: Success with numbers for MS but issues with text; More successful with tesseract for text - potential solution with tesseract for text and MS for numbers. Proposed image enhancements; Assigned to Will Lodge potentially in PDF Page to Image Function
-- Oliver Dean - GUI function 
-	+ Has basic UI with buttons - nothing advance but basic functionality and ability to interface with files
-- Shashwat ~ Bugzilla
-	+ Looked into - bug reporting and bug tracking - better to integrate later on in project development
+	- Connor: Changed focus to sprint 1 deliverable documents, only need to finish project acceptance tests
+	- Ciaran: Success and tried new OCR model which was faster than TrOCR and combined models have resulted in a high degree of accuracy. Changed image enhancement and had more success.
+- Connor ~ Sprint documents
+    - Only project acceptance tests need to be finished.
+- Oliver Dean - Setup Tests 
+	+ Made good progress and created tests successfully.
+
 
 **Reports accepted**
 
@@ -49,56 +49,56 @@ Move Minutes for meetings 4 be accepted
 
 ## Discussions:
 
-### Item 2.1: Last client meeting
-- Oliver mentioned client focus on Auto-table detection
-- Connor mentioned focus client has on OCR
+### Item 2.1: Client $100 Test
+- OCR accuracy, automatic table detection, unreadable header (xlsx output) - are highest priority.
+- Potentially need to assign error detection.
+- Will vdWB suggested using several OCRs to and comparing the output values for error detection, can insert image where there is a low confidence rating.
+- Ciaran has created a user intervention which previews the output to the user.
 
-### Item 2.2: Tests
-- Oliver volunteered to setup tests
-	- Setup up example OCR
+### Item 2.2: Sprint 1 Due
+- Discussed method of submission.
+- Connor has almost finished the documents required to be sent to the auditor and client.
 
-### Item 2.3: UI - How to integrate
-- Integration should be relatively easy according to Shashwat
-- Oliver wanting to use same libraries as Shashwat
+### Item 2.3: Moving Client Meeting
+- Won't move time, Connor will watch transcript, team agreed it would be too inconvenient for the client.
 
-### Item 2.4: Automatic Table Detection
-- Camelot pie suggested by Ciaran
-- William van den Wall Bake volunteered to take a look at.
+### Item 2.4: Put together Plan for UI or UX in line with MVP
+- Will vdWB was going to suggest developing UI/UX plans
+- Connor has already completed basic wireframes for UI in the scope of work documentation.
 
-### Item 2.5: Next Project Leader change over 
-- After Sprint 1 - suggested by Connor (end of next week)
-- Split role of leader and minutes taker
+### Item 2.5: UI Interoperability with Preset or detected table
+- Discussion about the UI interoperability with Shashwat and Will vdWB.
 
-### Item 2.6: Contact with People involved with Project at UWA
-- Connor to get in contact with UWA people who on project with Chris
+### Item 2.6: Assigne someone to look at Optimisation
+- Oliver suggested it be combined with code review
+- Team agreed and will look into later.
 
-### Item 2.7: Mentor meeting
-- Connor suggested Mentor meeting on 11am-2pm Monday. 
-- Ciaran requires accurate time
-- Time set of 11am on Monday next week 
-- Connor To get in touch
+### Item 2.7: Setup Github auto Python app building and testing
+- Will vdWB suggested using Github actions to set up automated testing 
+- Will vdWB and Oliver will look into implementing this.
+
+
 
 Section moved on block <br>
 **Mover:** William van den Wall Bake <br>
-**Seconder:** Oliver <br>
+**Seconder:** Ciaran <br>
 Unanimously passed
 
 ---
 
 ## To Do:
 
-### Item 3.1: Code Reviewer
-- Oliver volunteered for Code Review
+### Item 3.1: Confirm Connor on SPRINT 1/Sprint 1 Submisson
+- Only project acceptance tests needs to be completed
+- Team will review documents prior to submission
 
-### Item 3.2: Misc. Technical
-- Cirian raised OCR accuracy targets for Chris
-- Limitations of current tech talked about and 99% accuracy being 10% of rows
-- Raised with client accuracy issues
-- Suming values as a way to check accuracy
+### Item 3.2: Approach to Auto table detection
+- William Bake - investigate other ways to do automatic table detection
+- Team can suggest potential better ways to do so
 
-### Item 3.3: Requirement Analysis Document
-- Work done mostly; Section 3.5 has accidentally fallen through cracks.
-- Connor volunteered to take up section 3.5 and proof read document.
+### Item 3.3: Find time to meet with Auditor
+- Shashwat has emailed the auditor and received availability
+- Team agreed on Friday 30th 9-10am meeting
 
 Section moved on block <br>
 Mover: William van den Wall Bake <br>
@@ -113,29 +113,33 @@ Unanimously passed
 
 ### Item 4.2: Next Client Timezone
 - Wednesday 9:00am AWST (6pm Vancouver time) via Teams - Will to get in touch
+- Discussions:
+    - Table detection accuracy
+    - Explain sprint 1 documents
 
 ### Item 4.3: Next Mentor Meeting
-- 11am AWST on Monday - Connor to get in touch
+- Date has not been confirmed
 
-Move Items 4.1 to 4.3 on Block <br>
+### Item 4.4: Next Auditor Meeting
+- Shashwat will contact to confirm Friday 30th 9-10am meeting
+
+Move Items on Block <br>
 Mover: William van den Wall Bake <br>
 Seconder: Ciaran <br>
 Unanimously passed
 
-## Meeting Closed: 7:58pm 
+## Meeting Closed: 7:44pm 
 
 ---
 
 ## Action Items:
 - Reports for next meeting:
-	+ William Bake - Meeting 5 Minutes 
+    + Connor - Meeting 6 minutes
 	+ Connor & Cirian - Continued work on OCR
-	+ Connor - Requirment Analysis Document 3.5
 	+ Shashwat - UI/Table Build development progress
-	+ Oliver - Setup Tests
-	+ William Bake - Automatic Table detection investigation (Camelot Pie)
-	+ William Bake - Image Sharpening/Text enhancement investigation (Potentially reassign to OCR Crew)
+	+ William Bake & Oliver - Investigate Github auto Python app building and testing
+	+ William Bake - Automatic Table Detection investigation
+	+ Oliver - Consider code reviews
+ 
 - Contact
-	+ William Bake - Chris Parsons new meeting time - 9:00am Wednesday
-	+ Connor - Mentor Meeting time - 11am Monday
-	+ Connor - UWA In person contact ~ Person also working on project @ UWA
+	+ Shashwat - email Auditor to confirm Friday 30th 9-10am meeting

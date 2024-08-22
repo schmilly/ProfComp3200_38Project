@@ -3,7 +3,7 @@ import random
 import string
 import os
 
-OutputLocation = "./temp/"
+OutputLocation = "temp"
 
 # Turns image into cells based on inputs; 
 # Cell edges have perpendicular to image dimensions
@@ -34,7 +34,7 @@ def cellularize_Page_colrow(ImageLocation: str,colAr: list,rowAr: list):
         for row in rowAr:
             cell = page.crop((col[0],row[0],col[1],row[1]))
             filename = ("page_"+ pageID +"_"+ str(colcount) +"_"+ str(rowcount)+ ".png")
-            fullPath = OutputLocation + filename
+            fullPath = os.path.join(OutputLocation,filename)
             file = open(fullPath,"xb")
             cell.save(file,None)
             locationlist.append(fullPath)
