@@ -8,9 +8,9 @@ class TableDividerApp:
         self.root = root
         self.images = []
         self.current_image = 0
-        self.lines = []
         self.horizontal_lines = []
         self.vertical_lines = []
+        self.rectangles = []
         self.setup_ui()
 
     def setup_ui(self):
@@ -29,8 +29,8 @@ class TableDividerApp:
         self.save_button = tk.Button(self.root, text="Save Tables", command=self.save_tables)
         self.save_button.pack()
 
-        self.canvas.bind("<Button-1>", self.on_left_click)   # Left-click to draw a horizontal line
-        self.canvas.bind("<Button-3>", self.on_right_click)  # Right-click to draw a vertical line
+        self.canvas.bind("<Button-1>", self.draw_horizontal_line)
+        self.canvas.bind("<Button-3>", self.draw_vertical_line)
 
     def upload_pdf(self):
         file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
@@ -44,9 +44,6 @@ class TableDividerApp:
 
     def show_image(self, image):
         self.canvas.delete("all")
-        self.lines.clear()
-        self.horizontal_lines.clear()
-        self.vertical_lines.clear()
         resized_image = self.resize_image_to_fit_canvas(image)
         self.tk_image = ImageTk.PhotoImage(resized_image)
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.tk_image)
@@ -76,33 +73,37 @@ class TableDividerApp:
             self.current_image += 1
             self.show_image(self.images[self.current_image])
 
-    def on_left_click(self, event):
-        line = self.canvas.create_line(0, event.y, self.canvas.winfo_width(), event.y, fill="red")
-        self.horizontal_lines.append(event.y)
-        self.lines.append(line)
-        self.update_lines()
+    def draw_horizontal_line(self, event):
+        y = event.y
+        self.horizontal_lines.append(y)
+        self.canvas.create_line(0, y, self.canvas.winfo_width(), y, fill="red")
+        self.update_rectangles()
 
-    def on_right_click(self, event):
-        line = self.canvas.create_line(event.x, 0, event.x, self.canvas.winfo_height(), fill="blue")
-        self.vertical_lines.append(event.x)
-        self.lines.append(line)
-        self.update_lines()
+    def draw_vertical_line(self, event):
+        x = event.x
+        self.vertical_lines.append(x)
+        self.canvas.create_line(x, 0, x, self.canvas.winfo_height(), fill="blue")
+        self.update_rectangles()
 
-    def update_lines(self):
-        if len(self.horizontal_lines) >= 2 and len(self.vertical_lines) >= 2:
-            top = min(self.horizontal_lines)
-            bottom = max(self.horizontal_lines)
-            left = min(self.vertical_lines)
-            right = max(self.vertical_lines)
-            box = (left, top, right, bottom)
-            cropped_image = self.images[self.current_image].crop(box)
-            cropped_image.save(f'cropped_{self.current_image}.png')
-            print(f"Cropped image saved: {box}")
+    def update_rectangles(self):
+        self.rectangles.clear()
+        self.horizontal_lines.sort()
+        self.vertical_lines.sort()
+        for i in range(len(self.horizontal_lines) - 1):
+            for j in range(len(self.vertical_lines) - 1):
+                top = self.horizontal_lines[i]
+                bottom = self.horizontal_lines[i + 1]
+                left = self.vertical_lines[j]
+                right = self.vertical_lines[j + 1]
+                self.rectangles.append((left, top, right, bottom))
 
     def save_tables(self):
-        for idx, line in enumerate(self.lines):
-            self.canvas.delete(line)
-        print("Saved all cropped images.")
+        for idx, (left, top, right, bottom) in enumerate(self.rectangles):
+            left, right = sorted([left, right])
+            top, bottom = sorted([top, bottom])
+            cropped_image = self.images[self.current_image].crop((left, top, right, bottom))
+            cropped_image.save(f'table_{self.current_image}_{idx}.png')
+        print(f"{len(self.rectangles)} tables saved.")
 
 if __name__ == "__main__":
     root = tk.Tk()
