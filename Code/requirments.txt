@@ -1,3 +1,9 @@
 pdf2image=1.17.0
 pathlib=1.0.1
 table_ocr=0.2.5
+easyocr=1.7.1
+paddleocr=2.8.1
+paddlepaddle=2.6.1
+pillow=10.4.0
+PyPDF2=2.10.5
+pytesseract=0.3.10
