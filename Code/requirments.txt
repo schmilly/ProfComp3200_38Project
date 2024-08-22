@@ -1,0 +1,3 @@
+pdf2image=1.17.0
+pathlib=1.0.1
+table_ocr=0.2.5

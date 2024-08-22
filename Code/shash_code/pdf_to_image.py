@@ -12,5 +12,5 @@ def enhance_image(image):
 
 def pdf_to_images(pdf_path):
     images = convert_from_path(pdf_path)
-    enhanced_images = [enhance_image(image) for image in images]
-    return enhanced_images
+    #enhanced_images = [enhance_image(image) for image in images]
+    return images
