@@ -118,61 +118,61 @@ def verify_ocr_results(filename, image, ocr_text):
     root.mainloop()
     return ocr_var.get()
 
-total = 0
-bad = 0
-for filename in os.listdir(image_directory):
-    if filename.endswith(".png"):
-        parts = filename.split('_')
-        row_index = int(parts[2])
-        col_index = int(parts[3].split('.')[0])
-
-        image_path = os.path.join(image_directory, filename)
-        image = Image.open(image_path).convert("RGB")
-        processed_image = preprocess_image(image)
-        original_text, original_confidence = perform_paddle_ocr(image, return_confidence=True)
-        processed_text, processed_confidence = perform_paddle_ocr(processed_image, return_confidence=True)
-
-        if original_confidence > processed_confidence:
-            final_text = original_text
-            final_confidence = original_confidence
-            final_image = image 
-        else:
-            final_text = processed_text
-            final_confidence = processed_confidence
-            final_image = processed_image 
-        # Perform OCR using Tesseract
-        # text = pytesseract.image_to_string(processed_image, config='--oem 1 --psm 6')
-        # cleaned_text = clean_text(text)
-
-        if col_index == 0 and final_confidence == 0:
-            continue
-
-        total += 1
-        
-        if final_confidence < 0.80:
-            bad += 1
-            print(f"Review needed for {filename}: {final_text} (Confidence: {final_confidence})")
-            # To verify text via GUI manually for low confidence values
-            #final_text = verify_ocr_results(filename, final_image, final_text) 
-            #print(f"OCR Result for {filename}: {corrected_text}")  # Debug output
-
-        # Conditional fallback to paddle if the text is empty or mostly numeric
-        # if not cleaned_text or is_mostly_numeric(cleaned_text):
-        #cleaned_text = perform_paddle_ocr(processed_image)
-
-        if row_index not in table_data:
-            table_data[row_index] = {}
-        table_data[row_index][col_index] = final_text
-
-# Write the table data to a CSV file
-max_columns = max(max(cols.keys()) for cols in table_data.values())
-with open(output_csv, mode='w', newline='') as file:
-    writer = csv.writer(file)
-    for row_index in sorted(table_data.keys()):
-        row = []
-        for col_index in range(max_columns + 1):
-            cell_text = table_data[row_index].get(col_index, "")
-            row.append(cell_text)
-        writer.writerow(row)
-print(f"percentage less than 65 confidence score is {bad/total*100}% with {bad} possibly wrong")
-print("OCR verification complete. Results saved to CSV.")
+#total = 0
+#bad = 0
+#for filename in os.listdir(image_directory):
+#    if filename.endswith(".png"):
+#        parts = filename.split('_')
+#        row_index = int(parts[2])
+#        col_index = int(parts[3].split('.')[0])
+#
+#        image_path = os.path.join(image_directory, filename)
+#        image = Image.open(image_path).convert("RGB")
+#        processed_image = preprocess_image(image)
+#        original_text, original_confidence = perform_paddle_ocr(image, return_confidence=True)
+#        processed_text, processed_confidence = perform_paddle_ocr(processed_image, return_confidence=True)
+#
+#        if original_confidence > processed_confidence:
+#            final_text = original_text
+#            final_confidence = original_confidence
+#            final_image = image 
+#        else:
+#            final_text = processed_text
+#            final_confidence = processed_confidence
+#            final_image = processed_image 
+#        # Perform OCR using Tesseract
+#        # text = pytesseract.image_to_string(processed_image, config='--oem 1 --psm 6')
+#        # cleaned_text = clean_text(text)
+#
+#        if col_index == 0 and final_confidence == 0:
+#            continue
+#
+#        total += 1
+#        
+#        if final_confidence < 0.80:
+#            bad += 1
+#            print(f"Review needed for {filename}: {final_text} (Confidence: {final_confidence})")
+#            # To verify text via GUI manually for low confidence values
+#            #final_text = verify_ocr_results(filename, final_image, final_text) 
+#            #print(f"OCR Result for {filename}: {corrected_text}")  # Debug output
+#
+#        # Conditional fallback to paddle if the text is empty or mostly numeric
+#        # if not cleaned_text or is_mostly_numeric(cleaned_text):
+#        #cleaned_text = perform_paddle_ocr(processed_image)
+#
+#        if row_index not in table_data:
+#            table_data[row_index] = {}
+#        table_data[row_index][col_index] = final_text
+#
+## Write the table data to a CSV file
+#max_columns = max(max(cols.keys()) for cols in table_data.values())
+#with open(output_csv, mode='w', newline='') as file:
+#    writer = csv.writer(file)
+#    for row_index in sorted(table_data.keys()):
+#        row = []
+#        for col_index in range(max_columns + 1):
+#            cell_text = table_data[row_index].get(col_index, "")
+#            row.append(cell_text)
+#        writer.writerow(row)
+#print(f"percentage less than 65 confidence score is {bad/total*100}% with {bad} possibly wrong")
+#print("OCR verification complete. Results saved to CSV.")

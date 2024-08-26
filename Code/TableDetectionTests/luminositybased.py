@@ -82,7 +82,7 @@ def draw_vertical_lines(image, lines):
 
 
 
-def findTable(image_path="Image/Path/here",HorizontalState = "border",VerticalState = "border",horizontalgap = 20/2077, verticalgap = 80/1474):
+def findTable(image_path="Image/Path/here",HorizontalState = "border",VerticalState = "border",horizontalgap = 17/2077, verticalgap = 80/1474):
 
     #Gap between peaks/troughs before consider new peak/trough
 
@@ -104,9 +104,11 @@ def findTable(image_path="Image/Path/here",HorizontalState = "border",VerticalSt
     result_image = draw_lines(image, Horizontal) 
     final_image = draw_vertical_lines(image, Vertical)
 
-    final_image.save('output_image_with_lines.png')
+    #final_image.save('output_image_with_lines.png')
     final_image.show()
 
     return [Horizontal,Vertical]
 
-
+def convert_to_pairs(lst):
+    # Create a list of lists where each sublist contains two consecutive elements
+    return [[lst[i], lst[i + 1]] for i in range(len(lst) - 1)]
