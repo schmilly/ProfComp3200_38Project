@@ -5,6 +5,7 @@ import shutil
 import random
 import string
 import unittest
+from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 sys.path.append('..')
@@ -16,9 +17,9 @@ class TestOCRToCSV(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up the test environment once for all tests."""
-        cls.source_dir = r'C:\Users\olive\OneDrive\Desktop\CompSci\2024_semester_2\cits3200\ProfComp3200_38Project\Code\unitTests\Cellularised-Example'
-        cls.test_dir = 'test_images'
-        cls.output_csv = 'test_output.csv'
+        cls.source_dir = Path("..") / "Code" / "unitTests" / "Cellularised-Example"
+        cls.test_dir = cls.source_dir / "test_images"
+        cls.output_csv = cls.source_dir / "test_output.csv"
         os.makedirs(cls.test_dir, exist_ok=True)
 
         copied_files = []
@@ -395,7 +396,7 @@ class TestOCRToCSV(unittest.TestCase):
         }
 
         # Path to the Noto Sans font that supports multiple languages
-        font_path = r"C:\Users\olive\Downloads\Noto_Sans\NotoSans-VariableFont_wdth,wght.ttf"
+        font_path = Path("fonts") / "Noto_Sans" / "NotoSans-VariableFont_wdth,wght.ttf"
 
         for language, sentence in sentences.items():
             filename = f'test_{language.lower()}_0_0.png'
