@@ -1,9 +1,10 @@
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 from pathlib import Path
 from shash_code import *
 from TableDetectionTests import *
 from Cellularize import *
 from OCRCompare import *
-import os
 import time
 
 
@@ -11,9 +12,15 @@ storedir="temp"
 if not os.path.exists(storedir):
     os.makedirs(storedir)
 
+pdf_file = Path("..") / "Examples" / "2Page_AUSTRIA_1890_T2_g0bp.pdf"
+if not pdf_file.exists():
+    raise FileNotFoundError(f"PDF file not found: {pdf_file.resolve()}")
+
+
 image_list = []
 counter = 0
-for i in pdf_to_image.pdf_to_images("../Examples/2Page_AUSTRIA_1890_T2_g0bp.pdf"):
+
+for i in pdf_to_image.pdf_to_images(str(pdf_file)):
     name = os.path.join(storedir,"Document_" + str(counter) + ".png")
     i.save(name)
     image_list.append(os.path.join(str(Path.cwd()),name))
