@@ -8,6 +8,8 @@ from OCRCompare import *
 import time
 
 
+start_time = time.time()
+
 storedir="temp"
 if not os.path.exists(storedir):
     os.makedirs(storedir)
@@ -134,3 +136,6 @@ for collection in locationlists:
         os.remove(file)
 os.rmdir(storedir)
 
+end_time = time.time()
+elapsed_time = end_time - start_time
+print(f"Total execution time: {elapsed_time:.2f} seconds")
