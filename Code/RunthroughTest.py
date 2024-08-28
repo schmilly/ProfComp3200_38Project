@@ -13,7 +13,7 @@ if not os.path.exists(storedir):
 
 image_list = []
 counter = 0
-for i in pdf_to_image.pdf_to_images("/home/schmilly/ProfComp3200_38Project/Examples/2Page_AUSTRIA_1890_T2_g0bp.pdf"):
+for i in pdf_to_image.pdf_to_images("../Examples/2Page_AUSTRIA_1890_T2_g0bp.pdf"):
     name = os.path.join(storedir,"Document_" + str(counter) + ".png")
     i.save(name)
     image_list.append(os.path.join(str(Path.cwd()),name))
