@@ -130,11 +130,18 @@ print("OCR verification complete. Results saved to CSV.")
 print(f"Results using EasyOCR: {easyocr_count}")
 print(f"Results using PaddleOCR: {paddleocr_count}")
 
-#Cleanup = comment to keep files
-for collection in locationlists:
-    for file in collection:
-        os.remove(file)
-os.rmdir(storedir)
+# Cleanup (remove all files in temp and then remove temp) = comment to keep files
+for file in os.listdir(storedir):
+    file_path = os.path.join(storedir, file)
+    try:
+        os.remove(file_path)
+    except Exception as e:
+        print(f"Error deleting file {file_path}: {e}")
+
+try:
+    os.rmdir(storedir)
+except Exception as e:
+    print(f"Error removing directory {storedir}: {e}")
 
 end_time = time.time()
 elapsed_time = end_time - start_time
