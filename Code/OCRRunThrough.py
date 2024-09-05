@@ -1,8 +1,38 @@
 from OCRCompare import *
+
+"""
+This script performs Optical Character Recognition (OCR) on images using both PaddleOCR and EasyOCR, 
+and saves the extracted text to a CSV file. It processes images in a specified directory, 
+performs OCR with two different engines (PaddleOCR and EasyOCR), compares the confidence scores, 
+and selects the result with the highest confidence for each image.
+
+The script prints a summary of the results, including the percentage of low-confidence OCR results 
+(less than 80% confidence) and the total number of images processed by each OCR engine. 
+The results are saved in a CSV file.
+
+Workflow:
+1. Images from the specified directory are loaded and preprocessed for OCR.
+2. OCR is performed using PaddleOCR on both the original and preprocessed images.
+3. OCR is performed using EasyOCR on both the original and preprocessed images.
+4. The OCR result with the highest confidence score is selected.
+5. The results are stored in a table and written to a CSV file.
+6. A summary of results is printed, including the percentage of low-confidence results.
+
+Parameters:
+- image_directory: Directory containing the PNG images to be processed.
+- output_csv: Path to the output CSV file where results will be saved.
+- PaddleOCR configuration: The PaddleOCR model is configured with various parameters, 
+  including thresholds for text detection and recognition.
+
+Summary Output:
+- Percentage of OCR results with confidence less than 80%.
+- Number of images processed using EasyOCR and PaddleOCR.
+- The extracted text is saved in a table structure and written to the specified CSV file.
+"""
+
 #Set all existing loggers to WARNING
 for logger_name in logging.root.manager.loggerDict:
     logging.getLogger(logger_name).setLevel(logging.WARNING)
-
 
 #Load PaddleOCR model and processor
 ocr = PaddleOCR(use_angle_cls=True, lang='en',rec_model_dir='en_PP-OCRv4_rec',
@@ -14,8 +44,6 @@ ocr = PaddleOCR(use_angle_cls=True, lang='en',rec_model_dir='en_PP-OCRv4_rec',
     use_space_char=True,
     rec_image_shape='3, 48, 320',
     det_limit_side_len=960)
-
-
 
 image_directory = 'Austria'
 output_csv = 'output.csv'

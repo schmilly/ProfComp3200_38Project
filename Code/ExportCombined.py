@@ -8,6 +8,41 @@ import pytesseract
 image_directory = 'imageext'
 output_csv = 'output.csv'
 
+
+"""
+Extracts text from images in a specified directory using both Tesseract OCR and TrOCR as a fallback.
+
+This function processes all PNG images in the `image_directory`, applying preprocessing
+to enhance the image quality for OCR. It first attempts to extract text using Tesseract OCR.
+If the extracted text is empty or mostly numeric, it falls back to using TrOCR for text extraction.
+The extracted data is stored in a dictionary and written to a CSV file.
+
+@param image_directory: A string representing the path to the folder containing the images.
+                        Image filenames must follow the format `page_row_col.png`, where 
+                        `row` and `col` are the respective table coordinates.
+@param output_csv: A string representing the path to the CSV file where the table data will be saved.
+
+@return None. The table data is written directly to the CSV file.
+
+Example:
+--------
+extract_text_from_images_with_fallback("image_directory", "output.csv")
+
+Notes:
+- The function uses both `pytesseract` for initial OCR and `TrOCR` as a fallback if the text is empty
+    or mostly numeric.
+- Images are preprocessed by enhancing contrast, sharpening, and converting to grayscale before
+    performing OCR.
+- The `pytesseract` OCR tool and the Hugging Face `TrOCR` model must be installed and configured.
+- This function assumes the filenames follow the format `page_row_col.png` to extract row and column indices.
+
+Exceptions:
+-----------
+- Raises `OSError` if image files cannot be opened or processed.
+- Raises `ValueError` if image filenames do not follow the expected format.
+- If the system does not have a CUDA-compatible GPU, the model will run on the CPU, which may result in slower performance.
+"""
+
 #Load TrOCR model and processor
 processor = TrOCRProcessor.from_pretrained('microsoft/trocr-large-printed')
 model = VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-large-printed')
