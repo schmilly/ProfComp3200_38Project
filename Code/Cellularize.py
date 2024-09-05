@@ -5,18 +5,35 @@ import os
 
 OutputLocation = "temp"
 
-# Turns image into cells based on inputs; 
-# Cell edges have perpendicular to image dimensions
-# 
-# Arguments:
-#   ImageLocation: A string to the location of the image
-#   colArr: A list of columns bound co-ordinates in pair formats 
-#       i.e: [row1[rowStart,rowEnd],row2[rowStart,rowEnd]..e.t.c.]
-#   rowArr: a list of row bound co-ordinates in pair formats; Same as colArr
-#   Notes: Co-ordinates for colArr and rowArr:
-#       - Based on pixels - top left pixel of the input image being equal to [0,0] and 1 unit = 1 pixel
-def cellularize_Page_colrow(ImageLocation: str,colAr: list,rowAr: list):
-    #Verification TBD
+def cellularize_Page_colrow(ImageLocation: str, colAr: list, rowAr: list):
+    """
+    Splits an image into cells based on provided column and row boundaries.
+
+    This function takes an image from a specified location and divides it into smaller
+    cells according to the specified pixel boundaries in `colAr` and `rowAr`.
+    The cells are saved as PNG files in the designated output folder.
+
+    @param ImageLocation: A string representing the path to the input image.
+    @param colAr: A list of pairs representing the column boundaries in pixel coordinates.
+                  Each pair defines the start and end of a column (e.g., [[colStart1, colEnd1], [colStart2, colEnd2], ...]).
+    @param rowAr: A list of pairs representing the row boundaries in pixel coordinates.
+                  Each pair defines the start and end of a row (e.g., [[rowStart1, rowEnd1], [rowStart2, rowEnd2], ...]).
+
+    @return A list of strings, each representing the file path to a saved cell image.
+
+    Example:
+    --------
+    cellularize_Page_colrow("image.png", [[0, 100], [100, 200]], [[0, 100], [100, 200]])
+
+    Notes:
+    - The top-left pixel of the input image is considered as [0, 0].
+    - Each unit in the boundary arrays corresponds to a pixel in the image.
+    - Cells are saved in the `OutputLocation` directory as PNG files.
+
+    Exceptions:
+    -----------
+    - If the output directory already exists, a message is printed to the console.
+    """
     page = Image.open(r""+ImageLocation)
     try:
         os.mkdir(OutputLocation)
@@ -44,7 +61,6 @@ def cellularize_Page_colrow(ImageLocation: str,colAr: list,rowAr: list):
     
 
 def get_random_string(length):
-    # choose from all lowercase letter
     letters = string.ascii_lowercase
     result_str = ''.join(random.choice(letters) for i in range(length))
     return result_str

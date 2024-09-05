@@ -1,19 +1,46 @@
+
+#these are not accessed
 import os
 import csv
-from PIL import Image, ImageEnhance, ImageFilter, ImageTk
 import pytesseract
-import tkinter as tk
+import logging
 from tkinter import simpledialog, messagebox
-from paddleocr import PaddleOCR, draw_ocr
+
+#these are
+import tkinter as tk
 import cv2
 import numpy as np
-import easyocr  # Import EasyOCR
-import logging
+import easyocr
+from paddleocr import PaddleOCR, draw_ocr
+from PIL import Image, ImageEnhance, ImageFilter, ImageTk
+
 
 reader = easyocr.Reader(['en'], gpu=True)  # Set 'gpu=True' if GPU is available
 
+#Load PaddleOCR model and processor
+ocr = PaddleOCR(use_angle_cls=True, lang='en',rec_model_dir='en_PP-OCRv4_rec',
+    version='PP-OCRv4',
+    det_db_thresh=0.35,
+    det_db_box_thresh=0.45,
+    det_db_unclip_ratio=1.8,
+    cls_thresh=0.95,
+    use_space_char=True,
+    rec_image_shape='3, 48, 320',
+    det_limit_side_len=960)
+
+
 def perform_easyocr(image):
-    """Perform OCR using EasyOCR and return text with confidence score."""
+    """
+    Perform OCR using EasyOCR and return the recognized text with a confidence score.
+
+    This function uses EasyOCR to extract text from an input image and calculates 
+    the average confidence of the extracted text.
+
+    @param image: The input image (as a PIL Image) to be processed.
+    
+    @return: A tuple containing the recognized text (string) and the average confidence score (float).
+             Returns an empty string and a confidence score of 0 if no text is detected.
+    """
     results = reader.readtext(np.array(image), detail=1, paragraph=False)
     texts = [res[1] for res in results]
     confidences = [res[2] for res in results if res[2] > 0]  # Filter zero confidence
@@ -25,13 +52,20 @@ def perform_easyocr(image):
     else:
         return '', 0
 
-
-
-
-
-
 def perform_paddle_ocr(image, return_confidence=False):
-    """Extract text from an image along with confidence scores."""
+    """
+    Perform OCR using PaddleOCR and return the recognized text with optional confidence scores.
+
+    This function uses PaddleOCR to extract text from an input image and calculates 
+    the average confidence of the extracted text. It optionally returns the confidence score.
+
+    @param image: The input image (as a PIL Image) to be processed.
+    @param return_confidence: A boolean flag indicating whether to return the average confidence score (default: False).
+    
+    @return: If return_confidence is True, returns a tuple of the recognized text (string) and the average confidence score (float).
+             If return_confidence is False, returns only the recognized text (string).
+             Returns an empty string and a confidence score of 0 if no text is detected.
+    """
     image_array = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
     try:
         result = ocr.ocr(image_array, cls=True)
@@ -91,7 +125,18 @@ def is_mostly_numeric(text):
 
 
 def verify_ocr_results(filename, image, ocr_text):
-    """Create a Tkinter dialog to display the image and accept user corrections"""
+    """
+    Create a Tkinter dialog to allow the user to verify and correct OCR results.
+
+    This function displays the image and its corresponding OCR-extracted text in a simple GUI,
+    allowing the user to edit and confirm the recognized text.
+
+    @param filename: The name of the image file being processed (string).
+    @param image: The preprocessed image (as a PIL Image) to be displayed in the GUI.
+    @param ocr_text: The OCR-extracted text (string) to be displayed and corrected.
+
+    @return: The corrected text entered by the user (string).
+    """
     root = tk.Tk()
     root.title("Verify OCR Results")
     tk.Label(root, text=f"Filename: {filename}").pack()
@@ -120,17 +165,7 @@ def verify_ocr_results(filename, image, ocr_text):
     root.mainloop()
     return ocr_var.get()
 
-#Load PaddleOCR model and processor
-ocr = PaddleOCR(use_angle_cls=True, lang='en',rec_model_dir='en_PP-OCRv4_rec',
-    version='PP-OCRv4',
-    det_db_thresh=0.35,
-    det_db_box_thresh=0.45,
-    det_db_unclip_ratio=1.8,
-    cls_thresh=0.95,
-    use_space_char=True,
-    rec_image_shape='3, 48, 320',
-    det_limit_side_len=960)
-#
+
 
 #Commented out OCR Run through stuff to allow for importing of modules without code importation and execution
 # - Schmil 

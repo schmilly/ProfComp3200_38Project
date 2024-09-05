@@ -6,6 +6,38 @@ from PIL import Image
 image_directory = 'imageext'
 output_csv = 'output.csv'
 
+
+"""
+Extracts text from images in a specified directory and writes the data to a CSV file.
+
+This function processes all PNG images in the `image_directory`, using the filename 
+to determine the row and column indices for a table. It extracts text from each 
+image using the `pytesseract` OCR engine, cleans up the text, and stores it in a 
+dictionary structure. The data is then written into a CSV file.
+
+@param image_directory: A string representing the path to the folder containing the images.
+                        Image filenames must follow the format `page_row_col.png`, where 
+                        `row` and `col` are the respective table coordinates.
+@param output_csv: A string representing the path to the CSV file where the table data will be saved.
+
+@return None. The table data is written directly to the CSV file.
+
+Example:
+--------
+extract_text_from_images("image_directory", "output.csv")
+
+Notes:
+- The `pytesseract` OCR tool must be installed and properly configured.
+- The images should be in PNG format and contain text that can be recognized by `pytesseract`.
+- The table structure is determined by the row and column indices in the filenames.
+
+Exceptions:
+-----------
+- Raises `OSError` if image files cannot be opened or processed.
+- Raises `ValueError` if image filenames do not follow the expected format.
+- If no images are processed, an error message is printed and the function exits.
+"""
+
 table_data = {}
 
 for filename in os.listdir(image_directory):
