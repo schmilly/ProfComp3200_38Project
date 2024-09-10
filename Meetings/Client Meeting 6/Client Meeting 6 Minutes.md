@@ -1,6 +1,6 @@
 # **Client Meeting 6 Minutes**
 
-**Date: 4/09/2024**<br>
+**Date: 11/09/2024**<br>
 **Venue: Teams (Online)**
 
 Attendance:
@@ -14,14 +14,13 @@ Attendance:
 Apologies:
 - Ciaran David Petrus Engelbrecht <23169641@student.uwa.edu.au>
 
-## Meeting Opened: xx:xxam
+## Meeting Opened: --:--am
 
 ----
 
 ## Outline: <br>
- - General progress update
- - Current efficiency versus performance with easyocr
- - Conditional ocr models based on confidence scores
+ - Demo plan ~ retrospective, expected time to demo
+ - General progress updates
 
 
 ## **Discussions:**<br>
@@ -34,4 +33,4 @@ Apologies:
 
 ----
 
-## Meeting Closed: xx:xxam
+## Meeting Closed: --:--am
