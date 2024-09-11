@@ -3,8 +3,8 @@ pathlib==1.0.1
 table_ocr==0.2.5
 easyocr==1.7.1
 paddleocr==2.8.1
-paddlepaddle==2.6.1; sys_platform != 'darwin', 
-paddlepaddle==3.0.0b1 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/; sys_platform == 'darwin',
+paddlepaddle==2.6.1; sys_platform != 'darwin'
+paddlepaddle==3.0.0b1 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/; sys_platform == 'darwin'
 pillow==10.4.0
 PyPDF2==2.10.5
 pytesseract==0.3.10
