@@ -2,10 +2,36 @@ import subprocess
 import os
 
 def convert_pdf_to_images(pdf_path, output_folder, image_format='png'):
+    """
+    Converts a PDF file into images, saving them in a specified folder.
 
+    This function uses the `pdftoppm` tool to convert each page of the input PDF file 
+    into an image. The images are saved in the specified output folder with a 
+    filename prefix of 'page'. The image format can be customized.
+
+    @param pdf_path: A string representing the path to the PDF file to be converted.
+    @param output_folder: A string representing the path to the folder where the images 
+                          will be saved.
+    @param image_format: A string representing the image format (default is 'png').
+                         Can be set to other formats like 'jpeg' if supported by `pdftoppm`.
+
+    @return A list of strings, each representing the file path to a generated image.
+
+    Example:
+    --------
+    convert_pdf_to_images("document.pdf", "output_images", "jpeg")
+
+    Notes:
+    - The `pdftoppm` tool must be installed on your system (e.g., using Homebrew and Poppler for macOS).
+    - The output folder will be created if it does not exist.
+    - This function assumes that the `pdftoppm` command-line tool is available and accessible.
+
+    Exceptions:
+    -----------
+    - Raises `subprocess.CalledProcessError` if the PDF conversion process fails.
+    """
     os.makedirs(output_folder, exist_ok=True)
     
-    #this is the command which converts the pdf. 
     conversion = [
         'pdftoppm',
         '-{}'.format(image_format),

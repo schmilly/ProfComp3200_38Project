@@ -7,6 +7,39 @@ from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 image_directory = 'imageext'
 output_csv = 'output.csv'
 
+
+"""
+Extracts text from images using TrOCR (Transformer-based Optical Character Recognition) and writes the results to a CSV file.
+
+This function processes all PNG images in the `image_directory`, applies image preprocessing to enhance 
+text recognition, and then uses the Hugging Face TrOCR model to extract text. The extracted text is organized 
+in a table structure based on the filenames (which are expected to contain row and column information).
+The resulting table is written to a CSV file.
+
+@param image_directory: A string representing the path to the folder containing the images.
+                        Image filenames must follow the format `page_row_col.png`, where 
+                        `row` and `col` are the respective table coordinates.
+@param output_csv: A string representing the path to the CSV file where the table data will be saved.
+
+@return None. The table data is written directly to the CSV file.
+
+Example:
+--------
+extract_text_with_trocr("image_directory", "output.csv")
+
+Notes:
+- The TrOCR model (`microsoft/trocr-large-printed`) is used to perform OCR on the images.
+- Images are preprocessed by enhancing contrast and sharpening edges before performing OCR.
+- The `torch` library is used to load the model, and it will run on a GPU if available, otherwise on the CPU.
+- The table structure is determined by the row and column indices in the filenames.
+
+Exceptions:
+-----------
+- Raises `OSError` if image files cannot be opened or processed.
+- Raises `ValueError` if image filenames do not follow the expected format.
+- Raises `RuntimeError` if the model cannot be loaded onto the specified device (GPU or CPU).
+"""
+
 #Load TrOCR model and processor
 processor = TrOCRProcessor.from_pretrained('microsoft/trocr-large-printed')
 model = VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-large-printed')
