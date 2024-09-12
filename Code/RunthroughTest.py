@@ -69,51 +69,58 @@ paddleocr_count = 0
 #print(locationlists)
 for collection in locationlists:
     for filename in collection:
-        #if filename.endswith(".png"):
         parts = filename.split('_')
         row_index = int(parts[2])
         col_index = int(parts[3].split('.')[0])
-    
-        #image_path = os.path.join(storedir, filename)
         image_path = filename
         image = Image.open(image_path).convert("RGB")
         processed_image = preprocess_image(image)
-        # OCR with PaddleOCR
+
+        # OCR with PaddleOCR on both original and preprocessed image
         original_text, original_confidence = perform_paddle_ocr(image, return_confidence=True)
         processed_text, processed_confidence = perform_paddle_ocr(processed_image, return_confidence=True)
-    
-        # OCR with EasyOCR
-        easy_original_text, easy_original_conf = perform_easyocr(image)
-        easy_processed_text, easy_processed_conf = perform_easyocr(processed_image)
-    
+
+        # Determine if EasyOCR is needed based on PaddleOCR confidence values
+        if original_confidence < 0.8 and processed_confidence < 0.8:
+            # OCR with EasyOCR if PaddleOCR's confidence is low
+            easy_original_text, easy_original_conf = perform_easyocr(image)
+            easy_processed_text, easy_processed_conf = perform_easyocr(processed_image)
+            results = [
+                (original_text, original_confidence, 'Original Image, PaddleOCR'),
+                (processed_text, processed_confidence, 'Processed Image, PaddleOCR'),
+                (easy_original_text, easy_original_conf, 'Original Image, EasyOCR'),
+                (easy_processed_text, easy_processed_conf, 'Processed Image, EasyOCR')
+            ]
+        else:
+            results = [
+                (original_text, original_confidence, 'Original Image, PaddleOCR'),
+                (processed_text, processed_confidence, 'Processed Image, PaddleOCR')
+            ]
+
         # Determine the highest confidence result
-        best_result = max(
-            (original_text, original_confidence, 'Original Image, PaddleOCR'),
-            (processed_text, processed_confidence, 'Processed Image, PaddleOCR'),
-            (easy_original_text, easy_original_conf, 'Original Image, EasyOCR'),
-            (easy_processed_text, easy_processed_conf, 'Processed Image, EasyOCR'),
-            key=lambda x: x[1]  # Compare by confidence
-        )
-    
-        if col_index == 0 and best_result[1] == 0:
+        best_text, best_confidence, source = max(results, key=lambda x: x[1])
+
+        if best_confidence == 0: #Blank cells
             continue
-        if 'EasyOCR' in best_result[2]:
+
+        if 'EasyOCR' in source:
             easyocr_count += 1
         else:
             paddleocr_count += 1
           
         total += 1
         
-        if best_result[1] < 0.80:
+        if best_confidence < 0.8:
             bad += 1
-            print(f"Review needed for {filename}: {best_result[0]} (Confidence: {best_result[1]}, Source: {best_result[2]})")
-            # To verify text via GUI manually for low confidence values
+            print(f"Review needed for {filename}: {best_text} (Confidence: {best_confidence}, Source: {source})")
+            
+            # To verify text via GUI by user manually for low confidence value results
             #final_text = verify_ocr_results(filename, final_image, final_text) 
             #print(f"OCR Result for {filename}: {corrected_text}")  # Debug output
-    
+
         if row_index not in table_data:
             table_data[row_index] = {}
-        table_data[row_index][col_index] = best_result[0]
+        table_data[row_index][col_index] = best_text
 
 # Write the table data to a CSV file
 max_columns = max(max(cols.keys()) for cols in table_data.values())
@@ -130,11 +137,18 @@ print("OCR verification complete. Results saved to CSV.")
 print(f"Results using EasyOCR: {easyocr_count}")
 print(f"Results using PaddleOCR: {paddleocr_count}")
 
-#Cleanup = comment to keep files
-for collection in locationlists:
-    for file in collection:
-        os.remove(file)
-os.rmdir(storedir)
+# Cleanup (remove all files in temp and then remove temp) = comment to keep files
+for file in os.listdir(storedir):
+    file_path = os.path.join(storedir, file)
+    try:
+        os.remove(file_path)
+    except Exception as e:
+        print(f"Error deleting file {file_path}: {e}")
+
+try:
+    os.rmdir(storedir)
+except Exception as e:
+    print(f"Error removing directory {storedir}: {e}")
 
 end_time = time.time()
 elapsed_time = end_time - start_time
