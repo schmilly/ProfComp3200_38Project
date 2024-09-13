@@ -60,7 +60,7 @@ import logging
 for logger_name in logging.root.manager.loggerDict:
     logging.getLogger(logger_name).setLevel(logging.WARNING)
 
-reader = easyocr.Reader(['en'], gpu=False)  # Set 'gpu=True' if GPU is available
+reader = easyocr.Reader(['en'], gpu = True)  # Set 'gpu=True' if GPU is available
 
 total = 0
 bad = 0
