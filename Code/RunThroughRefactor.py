@@ -253,7 +253,7 @@ def main():
     reader = initialize_easyocr()
 
     # Define the PDF file to process and the output CSV
-    pdf_file = Path("..") / "Examples" / "MOROCCO_1960_T1_gxcd.pdf"
+    pdf_file = Path("..") / "Examples" / "INDIA_1941_T3_g0bp.pdf"
     output_csv = 'output.csv'
     
     # Convert PDF to images
