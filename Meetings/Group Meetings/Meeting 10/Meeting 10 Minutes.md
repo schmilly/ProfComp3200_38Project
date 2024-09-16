@@ -54,7 +54,7 @@ Section moved on block
 ### Item 2.1: Demo Meeting Plan 
 - 
 
-### Item 2.1: Retrospective Documentation
+### Item 2.1:
 - 
 
 ### Item 2.1:  
@@ -70,13 +70,19 @@ Section moved on block
 
 ## To Do:
 
-### Item 3.1:
+### Item 3.1: Review and approve Sprint 2 Goal Evaluation Document
  - 
 
-### Item 3.2: 
+### Item 3.2: Review and approve Sprint 3 Goals and User Stories
  - 
 
-### Item 3.3: 
+### Item 3.3: Complete Team Retrospective documentation
+ - 
+
+### Item 3.4: Assign Sprint 3 Team Manager
+ - 
+
+### Item 3.5: Organise next auditor meeting (expected next week)
  - 
 
 
@@ -94,8 +100,8 @@ Section moved on block
 ### Item 4.2: Next Client Timezone
 - Wednesday 9:00am AWST (6pm Vancouver time) via Teams
 - Discussions:
-    - General progress dicussions
-    - Plan for demo meeting
+    - Project Demonstration
+    - Client Retrospective
 
 ### Item 4.3: Next Mentor Meeting
 - Thursday 19th September
