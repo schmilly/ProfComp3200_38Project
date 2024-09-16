@@ -9,3 +9,4 @@ myenv/
 *.DS_Store
 *.log
 *.tmp
+*.deb
