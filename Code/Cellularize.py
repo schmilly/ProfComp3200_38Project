@@ -5,7 +5,7 @@ import os
 
 OutputLocation = "temp"
 
-def cellularize_Page_colrow(ImageLocation: str, colAr: list, rowAr: list):
+def cellularize_Page_colrow(ImageLocation: str, colAr: list, rowAr: list, page_num):
     """
     Splits an image into cells based on provided column and row boundaries.
 
@@ -34,30 +34,32 @@ def cellularize_Page_colrow(ImageLocation: str, colAr: list, rowAr: list):
     -----------
     - If the output directory already exists, a message is printed to the console.
     """
-    page = Image.open(r""+ImageLocation)
+def cellularize_Page_colrow(ImageLocation: str, colAr: list, rowAr: list, page_num):
+    """ Splits an image into cells based on provided column and row boundaries, including page number. """
+    page = Image.open(ImageLocation)
     try:
         os.mkdir(OutputLocation)
     except:
-        print(OutputLocation + " folder already exists!")
+        print(f"{OutputLocation} folder already exists!")
     
     pageID = get_random_string(7) 
     count = 0
     colcount = 0
     rowcount = 0
     locationlist = []
-    #Verify colArr and rowArr TBD 
+    # Process columns and rows, and name files including the page number
     for col in colAr:
         colcount = 0
         for row in rowAr:
-            cell = page.crop((col[0],row[0],col[1],row[1]))
-            filename = ("page_"+ pageID +"_"+ str(colcount) +"_"+ str(rowcount)+ ".png")
-            fullPath = os.path.join(OutputLocation,filename)
-            file = open(fullPath,"xb")
-            cell.save(file,None)
+            cell = page.crop((col[0], row[0], col[1], row[1]))
+            filename = f"page_{page_num}_{colcount}_{rowcount}.png"
+            fullPath = os.path.join(OutputLocation, filename)
+            cell.save(fullPath)
             locationlist.append(fullPath)
-            colcount = colcount + 1
-        rowcount = rowcount + 1
+            colcount += 1
+        rowcount += 1
     return locationlist
+
     
 
 def get_random_string(length):

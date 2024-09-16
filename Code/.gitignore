@@ -1,0 +1,11 @@
+# Virtual Environment
+newenv/
+
+# Cache Files
+*.pyc
+__pycache__/
+
+# Other
+.vscode/
+*.log
+*.bin
