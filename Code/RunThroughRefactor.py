@@ -81,12 +81,13 @@ def extract_tables_from_images(image_list):
         table_map.append(formatted_coords)
     return table_map
 
-def cellularize_tables(image_list, table_map):
-    """ Cellularize pages based on detected table coordinates. """
+def cellularize_tables(image_list, table_map, page_num):
+    """ Cellularize pages based on detected table coordinates, including page number in filenames. """
     location_lists = []
-    for index, table in enumerate(table_map):
-        location_lists.append(cellularize_Page_colrow(image_list[index], table[1], table[0]))
+    for index, (image_path, table_coords) in enumerate(zip(image_list, table_map)):
+        location_lists.append(cellularize_Page_colrow(image_path, table_coords[1], table_coords[0], page_num + index))
     return location_lists
+
 
 def initialize_paddleocr():
     """ Initialize PaddleOCR and automatically switch between GPU or CPU based on availability. """
@@ -215,14 +216,17 @@ def perform_ocr_on_images(location_lists, ocr, reader, batch_size=4):
 
     return table_data, total, bad, easyocr_count, paddleocr_count
 
-def write_to_csv(table_data, output_csv):
-    """ Write table data to a CSV file. """
-    max_columns = max(max(cols.keys()) for cols in table_data.values())
+def write_to_csv(all_table_data, output_csv):
     with open(output_csv, mode='w', newline='') as file:
         writer = csv.writer(file)
-        for row_index in sorted(table_data.keys()):
-            row = [table_data[row_index].get(col_index, "") for col_index in range(max_columns + 1)]
-            writer.writerow(row)
+        for page, rows in sorted(all_table_data.items()):
+            writer.writerow([f"Page {page}"])  
+            max_columns = max((max(cols.keys()) for cols in rows.values()), default=-1) + 1
+            for row_index in sorted(rows.keys()):
+                row = [rows[row_index].get(col_index, "") for col_index in range(max_columns)]
+                writer.writerow(row)
+
+
 
 def cleanup(storedir):
     """ Cleanup temporary files and directories. """
@@ -243,20 +247,43 @@ def main():
     storedir = "temp"
     setup_environment(storedir)
     configure_logging()
-    ocr = initialize_paddleocr()
-    reader = easyocr.Reader(['en'], gpu=False)
 
-    pdf_file = Path("..") / "Examples" / "2Page_AUSTRIA_1890_T2_g0bp.pdf"
+    # Initialize OCR engines
+    ocr = initialize_paddleocr()
+    reader = initialize_easyocr()
+
+    # Define the PDF file to process and the output CSV
+    pdf_file = Path("..") / "Examples" / "INDIA_1941_T3_g0bp.pdf"
+    output_csv = 'output.csv'
+    
+    # Convert PDF to images
     image_list = convert_pdf_to_images(pdf_file, storedir)
 
-    table_map = extract_tables_from_images(image_list)
-    location_lists = cellularize_tables(image_list, table_map)
+    page_num = 0
+    total, bad, easyocr_count, paddleocr_count = 0, 0, 0, 0
+    all_table_data = {}
+    
 
-    table_data, total, bad, easyocr_count, paddleocr_count = perform_ocr_on_images(location_lists, ocr, reader)
+    # Iterate over each image (page)
+    for image_path in image_list:
+        table_map = extract_tables_from_images([image_path])  # Pass single image
+        location_lists = cellularize_tables([image_path], table_map, page_num)
 
-    write_to_csv(table_data, 'output.csv')
+        # Perform OCR on the cellularized images
+        table_data, t_total, t_bad, t_easyocr_count, t_paddleocr_count = perform_ocr_on_images(location_lists, ocr, reader)
+        all_table_data[page_num] = table_data
 
-    print(f"Percentage of results with less than 80% confidence: {bad / total * 100:.2f}% ({bad} low confidence)")
+        total += t_total
+        bad += t_bad
+        easyocr_count += t_easyocr_count
+        paddleocr_count += t_paddleocr_count
+        
+        page_num += 1  # Increment the page number for filename uniqueness
+
+    # Write all OCR results to a CSV file
+    write_to_csv(all_table_data, output_csv)
+
+    print(f"Percentage of results with less than 80% confidence: {bad / total * 100:.2f}% ({bad} low confidence) if total > 0 else 0")
     print(f"Results saved to CSV. EasyOCR: {easyocr_count}, PaddleOCR: {paddleocr_count}")
 
     cleanup(storedir)
