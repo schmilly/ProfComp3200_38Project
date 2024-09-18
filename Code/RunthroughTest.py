@@ -21,7 +21,7 @@ if not pdf_file.exists():
 
 image_list = []
 counter = 0
-
+page_num = 0
 for i in pdf_to_image.pdf_to_images(str(pdf_file)):
     name = os.path.join(storedir,"Document_" + str(counter) + ".png")
     i.save(name)
@@ -38,7 +38,7 @@ for filepath in image_list:
 
 locationlists = []
 for index,Table in enumerate(TableMap):
-    locationlists.append(cellularize_Page_colrow(image_list[index],Table[1],Table[0]))
+    locationlists.append(cellularize_Page_colrow(image_list[index],Table[1],Table[0], page_num + index))
 
 #image_directory = 'Austria' #set this to be the directory containing all data cells
 #Commented out and using locationlist input instead
