@@ -62,17 +62,25 @@ Section moved on block
 - Oliver will demo it on his laptop
 - Ciaran explained that there is a specific paddleOCR model that you need to use GPU
 - Oliver shared screen of GUI to demo progress to the team
-- Will Bake discussed needed to increase DPI of PDF import as issues may arise with low DPI++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-- Will Lodge 
+- Will Bake discussed needed to increase DPI of PDF import as issues may arise with low DPI
+- Will Lodge will demo the command line functionality during the meeting
+- Connor discussed requirements for the retrospective during the meeting
 
 ### Item 2.1: Sprint 3 Team Manager
-- Assign during 
+- Connor raised if anyone wants to consider volunteering to be team manager for the next sprint
+- Team discussed deciding during the next group meeting
 
 ### Item 2.1: Auditor Meeting
 - Connor suggested cancelling regular team meeting next Tuesday
 - Shashwat will check with her about public holiday
 - Will Bake suggested he takes meeting minutes and Connor will run the meetings
 
+### Item 3.4: Shashwat demoed his UI work
+ - Demoed how to add lines and how his UI is working
+ - Ciaran asked if he could shift lines
+ - Will Bake asked if it implements auto table detection
+ - Shashwat explained that it can be done by integrating with Oliver's code
+ - Will Bake and Oliver discussed how to approach auto table detection
 
 Section moved on block
 <br> **Moved:** Connor
@@ -84,24 +92,20 @@ Section moved on block
 ## To Do:
 
 ### Item 3.1: Review and approve Sprint 2 Goal Evaluation Document
- - 
+ - Connor demonstrated the Sprint 2 Goal Evaluation Document and asked for team feedback
+ - Team approved the document
 
 ### Item 3.2: Review and approve Sprint 3 Goals and User Stories
- - discussed email stuff, etc.
+ - Connor demonstrated the Sprint 3 Goals and User Stories
+ - Will Bake discussed defining clear expectations and assessment criteria
+ - Will Bake identified issue with defining assessment criteria for quality of PDF input
+ - Connor will make required adjustments
 
 ### Item 3.3: Complete Team Retrospective documentation
- - 
-
-### Item 3.4: Shashwat demoed his UI work
- - Demoed how to add lines and how his UI is working
- - Ciaran asked if he could shift lines +++++++++++++++++++++++++++++++++++++++++++
- - Will Bake asked if it implements auto table detection
- - Shashwat explained that it can be done by integrating with Oliver's code
- - Will Bake and Oliver discussed how to approach auto table detection
-
-### Item 3.5:
- - 
-
+ - Connor guided the team through the retrospective documentation and asked for team feedback
+ - Team gave feedback
+ - Will Bake suggested improvements that the team can make for the future
+ - Team discussed the issues and identified ways of improving the issues
 
 Section moved on block 
 <br> **Mover:** Connor
@@ -111,24 +115,25 @@ Section moved on block
 ---
 ## Next Meeting:
 
-### Item 4.1: Recurring meeting time
+### Item 4.1: Next Team Meeting
 - Tuesday 3/09/24 7:00pm via Discord - Cancelled
+- Monday 23/09/24 9:00am
 
-### Item 4.2: Next Client Timezone
+### Item 4.2: Next Client Meeting
 - Wednesday 9:00am AWST (6pm Vancouver time) via Teams
 - Discussions:
     - Project Demonstration
     - Client Retrospective
 
 ### Item 4.3: Next Mentor Meeting
-- Thursday 19th September 
+- Thursday 19/09/24 9:00am via Teams
 
 ### Item 4.4: Next Auditor Meeting
-- Next Monday 9am
+- Monday 23/09/24 9:00am via Teams
 
 Section moved on block 
-<br> **Mover:** 
-<br> **Seconder:** 
+<br> **Mover:** Connor
+<br> **Seconder:** Oliver
 <br> Unanimously passed
 
 ## Meeting Closed: 7:52pm
@@ -137,12 +142,12 @@ Section moved on block
 
 ## Action Items:
 - Reports for next meeting:
-    + Ciaran - Automatic table detection progress, CSV output overwritten fix
-	+ Connor - Automatic table detection progress, sprint 2 stories, CSV output overwritten fix
-	+ Shashwat - UI & table build development progress
-	+ William Bake - Automatic table detection progress, CSV output overwritten fix
-	+ Oliver - UI & testing progress
+   + Ciaran - OCR stage progress
+	+ Connor - finish sprint documentation
+	+ Shashwat - UI & table build development progress, ability for user to shift lines
+	+ William Bake - Automatic table detection progress, code review
+	+ Oliver - UI, increase DPI of PDF import
 	+ William Lodge - Automatic table detection progress
  
 - Contact
-	+ Shashwat - next auditor meeting
+	+ Shashwat - Confirm auditor is ok with Public Holiday meeting
