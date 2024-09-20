@@ -3,8 +3,8 @@ import time
 import logging
 import csv
 from pathlib import Path
-from shash_code import *
-from TableDetectionTests import *
+import pdf_to_image
+from TableDetection import *
 from Cellularize import *
 from OCRCompare import *
 from paddleocr import PaddleOCR
