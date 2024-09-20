@@ -2,7 +2,6 @@ import os
 import time
 import logging
 import csv
-import concurrent.futures
 from pathlib import Path
 from shash_code import *
 from TableDetectionTests import *
@@ -14,6 +13,7 @@ import easyocr
 import paddle
 import cv2
 import numpy as np
+from tqdm import tqdm
 
 # Set logging level to WARNING to reduce verbosity
 for logger_name in logging.root.manager.loggerDict:
@@ -86,33 +86,39 @@ def process_image(filename):
 
     image = Image.open(filename).convert("RGB")
     processed_image = preprocess_image(image)
-
-    # Perform OCR with PaddleOCR
-    original_text, original_confidence = perform_paddle_ocr(image, ocr, return_confidence=True)
+    
+    # Perform OCR on the processed image first
     processed_text, processed_confidence = perform_paddle_ocr(processed_image, ocr, return_confidence=True)
-
-    # Determine if EasyOCR is needed
-    if original_confidence < 0.8 and processed_confidence < 0.8:
-        easy_original_text, easy_original_conf = perform_easyocr(image, reader)
-        easy_processed_text, easy_processed_conf = perform_easyocr(processed_image, reader)
-        results = [
-            (original_text, original_confidence, 'Original Image, PaddleOCR'),
-            (processed_text, processed_confidence, 'Processed Image, PaddleOCR'),
-            (easy_original_text, easy_original_conf, 'Original Image, EasyOCR'),
-            (easy_processed_text, easy_processed_conf, 'Processed Image, EasyOCR')
-        ]
+    
+    if processed_confidence >= 0.98:
+        best_text = processed_text
+        best_confidence = processed_confidence
+        source = 'Processed Image, PaddleOCR'
     else:
-        results = [
-            (original_text, original_confidence, 'Original Image, PaddleOCR'),
-            (processed_text, processed_confidence, 'Processed Image, PaddleOCR')
-        ]
-
-    # Select the best result
-    best_text, best_confidence, source = max(results, key=lambda x: x[1])
-
-    if best_confidence == 0:  # Skip blank cells
+        # Try OCR on the original image
+        original_text, original_confidence = perform_paddle_ocr(image, ocr, return_confidence=True)
+        
+        if original_confidence >= 0.8:
+            best_text = original_text
+            best_confidence = original_confidence
+            source = 'Original Image, PaddleOCR'
+        else:
+            # Use EasyOCR if confidence is still low
+            easy_processed_text, easy_processed_conf = perform_easyocr(processed_image, reader)
+            easy_original_text, easy_original_conf = perform_easyocr(image, reader)
+            
+            results = [
+                (processed_text, processed_confidence, 'Processed Image, PaddleOCR'),
+                (original_text, original_confidence, 'Original Image, PaddleOCR'),
+                (easy_processed_text, easy_processed_conf, 'Processed Image, EasyOCR'),
+                (easy_original_text, easy_original_conf, 'Original Image, EasyOCR')
+            ]
+            
+            best_text, best_confidence, source = max(results, key=lambda x: x[1])
+    
+    if best_confidence == 0:
         return None
-
+    
     return (row_index, col_index, best_text, best_confidence, source, filename)
 
 def main():
@@ -177,10 +183,11 @@ def main():
     )
     reader = easyocr.Reader(['en'], gpu=use_gpu)
 
-    # Use ThreadPoolExecutor for multithreading
-    max_workers = min(4, os.cpu_count() or 1)  # Adjust based on your system
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        results = list(executor.map(process_image, all_filenames))
+    # Process images sequentially with a progress bar
+    results = []
+    for filename in tqdm(all_filenames, desc="Processing images"):
+        result = process_image(filename)
+        results.append(result)
 
     # Process the results
     for result in results:
