@@ -2,8 +2,9 @@ import os
 import time
 import logging
 import csv
-from pathlib import Path
+import concurrent.futures
 import pdf_to_image
+from pathlib import Path
 from TableDetection import *
 from Cellularize import *
 from OCRCompare import *
@@ -13,7 +14,6 @@ import easyocr
 import paddle
 import cv2
 import numpy as np
-from tqdm import tqdm
 
 # Set logging level to WARNING to reduce verbosity
 for logger_name in logging.root.manager.loggerDict:
@@ -21,21 +21,22 @@ for logger_name in logging.root.manager.loggerDict:
 
 def preprocess_image(image):
     """Apply preprocessing to enhance OCR accuracy."""
-    image = image.convert('L')  # Convert to grayscale
-    base_width = image.width * 2
-    base_height = image.height * 2
-    image = image.resize((base_width, base_height), Image.LANCZOS)
+    #image = image.convert('L')  # Convert to grayscale
+    #base_width = image.width * 2
+    #base_height = image.height * 2
+    #image = image.resize((base_width, base_height), Image.LANCZOS)
 
-    # Enhance sharpness and contrast
-    enhancer = ImageEnhance.Sharpness(image)
-    image = enhancer.enhance(2)
-    enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(4)
+    ## Enhance sharpness and contrast
+    #enhancer = ImageEnhance.Sharpness(image)
+    #image = enhancer.enhance(2)
+    #enhancer = ImageEnhance.Contrast(image)
+    #image = enhancer.enhance(4)
 
-    # Denoise image
-    image = image.filter(ImageFilter.MedianFilter(size=3))
+    ## Denoise image
+    #image = image.filter(ImageFilter.MedianFilter(size=3))
 
-    return image.convert('RGB')
+    #return image.convert('RGB')
+    return image
 
 def perform_paddle_ocr(image, ocr_engine, return_confidence=False):
     """Perform OCR using PaddleOCR."""
@@ -177,11 +178,10 @@ def main():
     )
     reader = easyocr.Reader(['en'], gpu=use_gpu)
 
-    # Process images sequentially with a progress bar
-    results = []
-    for filename in tqdm(all_filenames, desc="Processing images"):
-        result = process_image(filename)
-        results.append(result)
+    # Use ThreadPoolExecutor for multithreading
+    max_workers = min(4, os.cpu_count() or 1)  # Adjust based on your system
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        results = list(executor.map(process_image, all_filenames))
 
     # Process the results
     for result in results:
