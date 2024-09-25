@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import filedialog
-from tkinter import ttk  # For adding the scrollbar
 from PIL import Image, ImageTk
 from pdf2image import convert_from_path
 
@@ -13,59 +12,48 @@ class TableDividerApp:
         self.vertical_lines = []
         self.rectangles = []
         self.undo_stack = []
-        self.zoom_factor = 1.0  # For zooming in/out
+        self.zoom_level = 1.0
         self.setup_ui()
 
     def setup_ui(self):
-        self.root.geometry("1000x800")  # Start with a large window
+        self.canvas = tk.Canvas(self.root, width=800, height=600, scrollregion=(0, 0, 800, 1200))
+        self.canvas.pack(expand=tk.YES, fill=tk.BOTH)
 
-        # Main frame to contain canvas and scrollbars
-        main_frame = tk.Frame(self.root)
-        main_frame.pack(fill=tk.BOTH, expand=1)
+        # Adding scrollbars
+        self.scroll_x = tk.Scrollbar(self.root, orient=tk.HORIZONTAL, command=self.canvas.xview)
+        self.scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
+        self.scroll_y = tk.Scrollbar(self.root, orient=tk.VERTICAL, command=self.canvas.yview)
+        self.scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Canvas with scrollbars
-        self.canvas = tk.Canvas(main_frame, bg='grey')
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        self.canvas.configure(xscrollcommand=self.scroll_x.set, yscrollcommand=self.scroll_y.set)
 
-        scroll_y = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=self.canvas.yview)
-        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
-
-        scroll_x = ttk.Scrollbar(main_frame, orient=tk.HORIZONTAL, command=self.canvas.xview)
-        scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
-
-        self.canvas.config(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
-        self.canvas.bind("<Configure>", self.resize_canvas)
-
-        # Frame for buttons
+        # Buttons for functionality
         button_frame = tk.Frame(self.root)
-        button_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=10)
+        button_frame.pack(side=tk.BOTTOM, fill=tk.X)
 
-        # Align buttons in the frame
         self.upload_button = tk.Button(button_frame, text="Upload PDF", command=self.upload_pdf)
-        self.upload_button.grid(row=0, column=1, padx=5)
+        self.upload_button.pack(side=tk.LEFT)
 
         self.prev_button = tk.Button(button_frame, text="Previous Page", command=self.show_prev_image)
-        self.prev_button.grid(row=0, column=0, padx=5)
+        self.prev_button.pack(side=tk.LEFT)
 
         self.next_button = tk.Button(button_frame, text="Next Page", command=self.show_next_image)
-        self.next_button.grid(row=0, column=2, padx=5)
+        self.next_button.pack(side=tk.LEFT)
 
         self.save_button = tk.Button(button_frame, text="Save Tables", command=self.save_tables)
-        self.save_button.grid(row=0, column=3, padx=5)
+        self.save_button.pack(side=tk.LEFT)
 
         self.undo_button = tk.Button(button_frame, text="Undo Last Line", command=self.undo_last_line)
-        self.undo_button.grid(row=0, column=4, padx=5)
+        self.undo_button.pack(side=tk.LEFT)
 
-        # Add Zoom In and Zoom Out buttons
         self.zoom_in_button = tk.Button(button_frame, text="Zoom In", command=self.zoom_in)
-        self.zoom_in_button.grid(row=0, column=5, padx=5)
+        self.zoom_in_button.pack(side=tk.LEFT)
 
         self.zoom_out_button = tk.Button(button_frame, text="Zoom Out", command=self.zoom_out)
-        self.zoom_out_button.grid(row=0, column=6, padx=5)
+        self.zoom_out_button.pack(side=tk.LEFT)
 
-        # Bind mouse clicks for drawing lines
-        self.canvas.bind("<Button-1>", self.draw_horizontal_line)  # Left-click for horizontal
-        self.canvas.bind("<Button-3>", self.draw_vertical_line)    # Right-click for vertical
+        self.canvas.bind("<Button-1>", self.draw_vertical_line)  # Left-click for vertical line
+        self.canvas.bind("<Button-3>", self.draw_horizontal_line)  # Right-click for horizontal line
 
     def upload_pdf(self):
         file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
@@ -82,17 +70,12 @@ class TableDividerApp:
         resized_image = self.resize_image_to_fit_canvas(image)
         self.tk_image = ImageTk.PhotoImage(resized_image)
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.tk_image)
-        self.canvas.config(scrollregion=self.canvas.bbox(tk.ALL))  # Set scroll region
+        self.redraw_lines()  # Redraw lines after showing the image
 
     def resize_image_to_fit_canvas(self, image):
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-
-        # Apply zoom factor
-        new_width = int(image.width * self.zoom_factor)
-        new_height = int(image.height * self.zoom_factor)
-
-        return image.resize((new_width, new_height), Image.LANCZOS)
+        canvas_width = int(self.canvas.winfo_width() * self.zoom_level)
+        canvas_height = int(self.canvas.winfo_height() * self.zoom_level)
+        return image.resize((canvas_width, canvas_height), Image.LANCZOS)
 
     def show_prev_image(self):
         if self.current_image > 0:
@@ -105,16 +88,16 @@ class TableDividerApp:
             self.show_image(self.images[self.current_image])
 
     def draw_horizontal_line(self, event):
-        y = event.y
-        line = self.canvas.create_line(0, y, self.canvas.winfo_width(), y, fill="red")
+        y = event.y / self.zoom_level
         self.horizontal_lines.append(y)
+        line = self.canvas.create_line(0, y * self.zoom_level, self.canvas.winfo_width(), y * self.zoom_level, fill="red")
         self.undo_stack.append(("horizontal", line, y))
         self.update_rectangles()
 
     def draw_vertical_line(self, event):
-        x = event.x
-        line = self.canvas.create_line(x, 0, x, self.canvas.winfo_height(), fill="blue")
+        x = event.x / self.zoom_level
         self.vertical_lines.append(x)
+        line = self.canvas.create_line(x * self.zoom_level, 0, x * self.zoom_level, self.canvas.winfo_height(), fill="blue")
         self.undo_stack.append(("vertical", line, x))
         self.update_rectangles()
 
@@ -140,6 +123,20 @@ class TableDividerApp:
             self.canvas.delete(line)
             self.update_rectangles()
 
+    def zoom_in(self):
+        self.zoom_level *= 1.1
+        self.show_image(self.images[self.current_image])
+
+    def zoom_out(self):
+        self.zoom_level /= 1.1
+        self.show_image(self.images[self.current_image])
+
+    def redraw_lines(self):
+        for y in self.horizontal_lines:
+            self.canvas.create_line(0, y * self.zoom_level, self.canvas.winfo_width(), y * self.zoom_level, fill="red")
+        for x in self.vertical_lines:
+            self.canvas.create_line(x * self.zoom_level, 0, x * self.zoom_level, self.canvas.winfo_height(), fill="blue")
+
     def save_tables(self):
         for idx, (left, top, right, bottom) in enumerate(self.rectangles):
             left, right = sorted([left, right])
@@ -147,17 +144,6 @@ class TableDividerApp:
             cropped_image = self.images[self.current_image].crop((left, top, right, bottom))
             cropped_image.save(f'table_{self.current_image}_{idx}.png')
         print(f"{len(self.rectangles)} tables saved.")
-
-    def resize_canvas(self, event):
-        self.canvas.config(scrollregion=self.canvas.bbox(tk.ALL))
-
-    def zoom_in(self):
-        self.zoom_factor *= 1.1
-        self.show_image(self.images[self.current_image])
-
-    def zoom_out(self):
-        self.zoom_factor *= 0.9
-        self.show_image(self.images[self.current_image])
 
 if __name__ == "__main__":
     root = tk.Tk()
