@@ -4,6 +4,7 @@ newenv/
 # Cache Files
 *.pyc
 __pycache__/
+en_PP-OCRv4_rec/
 
 # Other
 .vscode/
