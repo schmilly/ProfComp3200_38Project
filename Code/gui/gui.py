@@ -9,6 +9,7 @@ from PyQt5.QtCore import Qt, QMimeData
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QPalette, QColor, QPixmap
 from pdf2image import convert_from_path
 from pdf_to_image import pdf_to_images
+from table_divider import TableDividerApp
 import ocr
 
 class FileDropButton(QPushButton):

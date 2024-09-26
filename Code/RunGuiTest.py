@@ -10,10 +10,11 @@ from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QPalette, QColor, QPixmap
 from pdf2image import convert_from_path
 from pdf_to_image import pdf_to_images
 from PIL import Image
+from luminosity_table_detection import *
 #import ocr  # Assuming `ocr` contains the function for OCR and table extraction
 
 # Imports from the original script
-from RunThroughRefactor import (setup_environment, convert_pdf_to_images, 
+from Code.RunThroughRefactor_1 import (setup_environment, convert_pdf_to_images, 
                                 extract_tables_from_images, cellularize_tables,
                                 initialize_paddleocr, initialize_easyocr, perform_ocr_on_images, 
                                 write_to_csv, cleanup)
