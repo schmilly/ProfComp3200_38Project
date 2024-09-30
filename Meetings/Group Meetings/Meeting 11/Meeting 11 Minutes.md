@@ -139,12 +139,10 @@ Section moved on block
 ---
 
 ## Action Items:
-- Reports for next meeting:
+### Reports for next meeting:
 + Ciaran, Connor & Oliver- OCR and GUI
-+ Connor - 
-+ Shashwat - Continued work on GUI lines
 + William Bake & William Lodge - Table Detection and GUI integration of Ciarans work
-- Contact
+### Contact
 + Connor to contact Andy for next meeting
 
 
