@@ -31,8 +31,8 @@ from PIL import Image
 
 
 # Local imports
-from Code.RunThroughRefactor_1 import run_ocr_pipeline
-import Code.RunThroughRefactor_1 as rtr
+from RunThroughRefactor_1 import run_ocr_pipeline
+import RunThroughRefactor_1 as rtr
 import luminosity_table_detection as ltd
 
 # Configure logging

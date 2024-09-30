@@ -40,8 +40,8 @@ import logging
 import csv
 import concurrent.futures
 from pathlib import Path
-from shash_code import *
-from TableDetectionTests import *
+from pdf_to_image import *
+from TableDetection import *
 from Cellularize import *
 from OCRCompare import *
 from paddleocr import PaddleOCR
