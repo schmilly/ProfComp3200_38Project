@@ -473,19 +473,19 @@ class OCRApp(QMainWindow):
 
     def init_ui(self):
 
-        self.init_menu_bar()
-
         splitter = QSplitter(Qt.Horizontal)
+        self.graphics_view = PDFGraphicsView(self)
+        splitter.addWidget(self.graphics_view)
 
         self.project_list = QListWidget()
         splitter.addWidget(self.project_list)
         self.project_list.currentRowChanged.connect(self.change_page)
-        self.graphics_view = PDFGraphicsView(self)
-        splitter.addWidget(self.graphics_view)
 
         splitter.setSizes([300, 1600])
 
         self.setCentralWidget(splitter)
+
+        self.init_menu_bar()
 
         self.init_tool_bar()
 
@@ -534,6 +534,21 @@ class OCRApp(QMainWindow):
         exit_action = QAction('Exit', self)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
+
+        # Edit Menu (this is where undo and redo should be placed)
+        edit_menu = menu_bar.addMenu('Edit')
+
+        # Undo Action
+        self.undo_action = QAction('Undo', self)
+        self.undo_action.setShortcut('Ctrl+Z')
+        self.undo_action.triggered.connect(self.graphics_view.undo_last_action)
+        edit_menu.addAction(self.undo_action)
+
+        # Redo Action
+        self.redo_action = QAction('Redo', self)
+        self.redo_action.setShortcut('Ctrl+Y')
+        self.redo_action.triggered.connect(self.graphics_view.redo_last_action)
+        edit_menu.addAction(self.redo_action)
 
         # View Menu
         view_menu = menu_bar.addMenu('View')
@@ -628,18 +643,16 @@ class OCRApp(QMainWindow):
         self.init_ocr_action.triggered.connect(self.initialize_ocr_engines)
         tool_bar.addAction(self.init_ocr_action)
 
+        # Detect Tables Action
+        self.detect_tables_action = QAction('Detect Tables', self)
+        self.detect_tables_action.triggered.connect(self.detect_tables)
+        self.detect_tables_action.setEnabled(False)
+        tool_bar.addAction(self.detect_tables_action)
+
         # Run OCR
         self.run_ocr_action = QAction('Run OCR', self)
         self.run_ocr_action.triggered.connect(self.run_ocr)
         tool_bar.addAction(self.run_ocr_action)
-
-        # Toggle Editing Mode
-        self.edit_mode_action = QAction('Editing Mode', self)
-        self.edit_mode_action.setCheckable(True)
-        self.edit_mode_action.setChecked(True)
-        self.edit_mode_action.setEnabled(False)
-        self.edit_mode_action.triggered.connect(self.toggle_edit_mode)
-        tool_bar.addAction(self.edit_mode_action)
 
         # Cropping Mode Toggle
         self.cropping_mode_action = QAction('Cropping Mode', self)
@@ -649,23 +662,13 @@ class OCRApp(QMainWindow):
         self.cropping_mode_action.triggered.connect(self.toggle_cropping_mode)
         tool_bar.addAction(self.cropping_mode_action)
 
-        # Undo Action
-        self.undo_action = QAction('Undo', self)
-        self.undo_action.setShortcut('Ctrl+Z')
-        self.undo_action.triggered.connect(self.graphics_view.undo_last_action)
-        tool_bar.addAction(self.undo_action)
-
-        # Redo Action
-        self.redo_action = QAction('Redo', self)
-        self.redo_action.setShortcut('Ctrl+Y')
-        self.redo_action.triggered.connect(self.graphics_view.redo_last_action)
-        edit_menu.addAction(self.redo_action)
-
-        # Detect Tables Action
-        self.detect_tables_action = QAction('Detect Tables', self)
-        self.detect_tables_action.triggered.connect(self.detect_tables)
-        self.detect_tables_action.setEnabled(False)
-        tool_bar.addAction(self.detect_tables_action)
+        # Toggle Editing Mode
+        self.edit_mode_action = QAction('Editing Mode', self)
+        self.edit_mode_action.setCheckable(True)
+        self.edit_mode_action.setChecked(True)
+        self.edit_mode_action.setEnabled(False)
+        self.edit_mode_action.triggered.connect(self.toggle_edit_mode)
+        tool_bar.addAction(self.edit_mode_action)
 
         # Separator
         tool_bar.addSeparator()
