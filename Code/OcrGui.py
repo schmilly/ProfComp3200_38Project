@@ -30,16 +30,34 @@ from PyQt5.QtGui import QPixmap, QImage, QPen, QColor, QPainter, QFont, QDragEnt
 from PyQt5.QtCore import Qt, QRectF, QObject, pyqtSignal, QLineF, QThread
 from pdf2image import convert_from_path
 from PIL import Image
+from logging.handlers import RotatingFileHandler
 
 # Local imports
 #from RunThroughRefactor_1 import run_ocr_pipeline
 #import RunThroughRefactor_1 as rtr
 #import luminosity_table_detection as ltd
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, filename='Ocr_app.log', filemode='w',
-                    format='%(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+def configure_logging():
+    """Configures the logging settings."""
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)  # Capture all levels of logs
+
+    # Formatter for log messages
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+    # File handler to write logs to a file
+    file_handler = RotatingFileHandler('OCR_app.log', maxBytes=5*1024*1024, backupCount=5, encoding='utf-8')    
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    # Console handler to output logs to the console
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)  # Adjust as needed
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
 
 
 class EmittingStream(QObject):
@@ -71,6 +89,7 @@ class LineItem(QGraphicsLineItem):
 class PDFGraphicsView(QGraphicsView):
     rectangleSelected = pyqtSignal(QRectF)
     lineModified = pyqtSignal()
+    logger = logging.getLogger(__name__)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -95,7 +114,7 @@ class PDFGraphicsView(QGraphicsView):
             self.rectangleSelected.connect(self.get_main_window().on_rectangle_selected)
             self.lineModified.connect(self.get_main_window().on_line_modified)
         except Exception as e:
-            logger.error(f"Error connecting signals: {e}")
+            self.logger.error(f"Error connecting signals: {e}")
 
     def get_main_window(self):
         """Traverse the parent hierarchy to get the QMainWindow (OCRApp) instance."""
@@ -107,7 +126,7 @@ class PDFGraphicsView(QGraphicsView):
                 parent = parent.parent()
             raise RuntimeError("Main window (QMainWindow) not found in the parent hierarchy.")
         except Exception as e:
-            logger.error(f"Error in get_main_window: {e}")
+            self.logger.error(f"Error in get_main_window: {e}")
             raise
 
     def pil_image_to_qimage(self, pil_image):
@@ -127,7 +146,7 @@ class PDFGraphicsView(QGraphicsView):
             qimage = QImage(data, pil_image.width, pil_image.height, QImage.Format_RGBA8888)
             return qimage
         except Exception as e:
-            logger.error(f"Error converting PIL image to QImage: {e}")
+            self.logger.error(f"Error converting PIL image to QImage: {e}")
             self.get_main_window().show_error_message(f"An error occurred while converting image: {e}")
             return QImage()
 
@@ -141,7 +160,7 @@ class PDFGraphicsView(QGraphicsView):
             self.load_image(self.pdf_images[self.current_page_index])  # Load the first page
         except Exception as e:
             self.get_main_window().show_error_message(f"Error loading PDF: {e}")
-            logger.error(f"Error loading PDF: {e}")
+            self.logger.error(f"Error loading PDF: {e}")
 
     def next_page(self):
         """Navigate to the next page of the PDF."""
@@ -151,9 +170,9 @@ class PDFGraphicsView(QGraphicsView):
                 self.load_image(self.pdf_images[self.current_page_index])
                 self.get_main_window().update_page_label(self.current_page_index)
             else:
-                logger.warning("No next page available.")
+                self.logger.warning("No next page available.")
         except Exception as e:
-            logger.error(f"Error in next_page: {e}")
+            self.logger.error(f"Error in next_page: {e}")
             self.get_main_window().show_error_message(f"An error occurred: {e}")
 
     def previous_page(self):
@@ -164,9 +183,9 @@ class PDFGraphicsView(QGraphicsView):
                 self.load_image(self.pdf_images[self.current_page_index])
                 self.get_main_window().update_page_label(self.current_page_index)
             else:
-                logger.warning("No previous page available.")
+                self.logger.warning("No previous page available.")
         except Exception as e:
-            logger.error(f"Error in previous_page: {e}")
+            self.logger.error(f"Error in previous_page: {e}")
             self.get_main_window().show_error_message(f"An error occurred: {e}")
 
     def load_image(self, image):
@@ -180,7 +199,7 @@ class PDFGraphicsView(QGraphicsView):
             self._rect_items.clear()
             self._line_items.clear()
         except Exception as e:
-            logger.error(f"Error loading image into scene: {e}")
+            self.logger.error(f"Error loading image into scene: {e}")
             self.get_main_window().show_error_message(f"An error occurred while loading image: {e}")
 
     def mousePressEvent(self, event):
@@ -198,7 +217,7 @@ class PDFGraphicsView(QGraphicsView):
             else:
                 super().mousePressEvent(event)
         except Exception as e:
-            logger.error(f"Error in mousePressEvent: {e}")
+            self.logger.error(f"Error in mousePressEvent: {e}")
             self.get_main_window().show_error_message(f"An error occurred: {e}")
 
     def mouseMoveEvent(self, event):
@@ -209,7 +228,7 @@ class PDFGraphicsView(QGraphicsView):
             else:
                 super().mouseMoveEvent(event)
         except Exception as e:
-            logger.error(f"Error in mouseMoveEvent: {e}")
+            self.logger.error(f"Error in mouseMoveEvent: {e}")
             self.get_main_window().show_error_message(f"An error occurred: {e}")
 
     def mouseReleaseEvent(self, event):
@@ -225,7 +244,7 @@ class PDFGraphicsView(QGraphicsView):
             else:
                 super().mouseReleaseEvent(event)
         except Exception as e:
-            logger.error(f"Error in mouseReleaseEvent: {e}")
+            self.logger.error(f"Error in mouseReleaseEvent: {e}")
             self.get_main_window().show_error_message(f"An error occurred: {e}")
 
     def get_cropped_areas(self):
@@ -263,7 +282,7 @@ class PDFGraphicsView(QGraphicsView):
             else:
                 super().keyPressEvent(event)
         except Exception as e:
-            logger.error(f"Error in keyPressEvent: {e}")
+            self.logger.error(f"Error in keyPressEvent: {e}")
             self.get_main_window().show_error_message(f"An error occurred: {e}")
 
     def undo_last_action(self):
@@ -273,7 +292,7 @@ class PDFGraphicsView(QGraphicsView):
                 action.undo()
                 self.redo_stack.append(action)
         except Exception as e:
-            logger.error(f"Error in undo_last_action: {e}")
+            self.logger.error(f"Error in undo_last_action: {e}")
             self.get_main_window().show_error_message(f"An error occurred: {e}")
 
     def redo_last_action(self):
@@ -283,7 +302,7 @@ class PDFGraphicsView(QGraphicsView):
                 action.redo()
                 self.undo_stack.append(action)
         except Exception as e:
-            logger.error(f"Error in redo_last_action: {e}")
+            self.logger.error(f"Error in redo_last_action: {e}")
             self.get_main_window().show_error_message(f"An error occurred: {e}")
 
     def get_rectangles(self):
@@ -338,7 +357,7 @@ class PDFGraphicsView(QGraphicsView):
                             image = QImage(file_path)
                             if image.isNull():
                                 self.get_main_window().show_error_message(f"Failed to load image: {file_path}")
-                                logger.error(f"Failed to load image: {file_path}")
+                                self.logger.error(f"Failed to load image: {file_path}")
                             else:
                                 self.load_image(image)
                         else:
@@ -347,7 +366,7 @@ class PDFGraphicsView(QGraphicsView):
                 self.get_main_window().show_error_message("Invalid file(s). Please drop local files only.")
         except Exception as e:
             self.get_main_window().show_error_message(f"An error occurred while dropping files: {e}")
-            logger.error(f"Error in dropEvent: {e}")
+            self.logger.error(f"Error in dropEvent: {e}")
 
 class Action:
     """Base class for actions that can be undone/redone."""
@@ -422,6 +441,7 @@ class OCRWorker(QThread):
     ocr_progress = pyqtSignal(int, int)
     ocr_completed = pyqtSignal(object)
     ocr_error = pyqtSignal(str)
+    logger = logging.getLogger(__name__)
 
     def __init__(self, pdf_file, storedir, output_csv, ocr_cancel_event):
         super().__init__()
@@ -439,16 +459,18 @@ class OCRWorker(QThread):
             # Emit completion signal with results
             self.ocr_completed.emit((all_table_data, total, bad, easyocr_count, paddleocr_count, processing_time))
         except Exception as e:
-            logger.error(f"Error in OCRWorker: {e}", exc_info=True)
+            self.logger.error(f"Error in OCRWorker: {e}", exc_info=True)
             self.ocr_error.emit(str(e))
 
 class OCRApp(QMainWindow):
     ocr_completed = pyqtSignal(object)
     ocr_progress = pyqtSignal(int, int)  # current progress, total tasks
     ocr_error = pyqtSignal(str)
+    logger = logging.getLogger(__name__)
 
     def __init__(self):
         super().__init__()
+
         self.setWindowTitle('PDF OCR Demo')
         self.resize(1920, 1080)
         self.current_pdf_path = None
@@ -459,11 +481,11 @@ class OCRApp(QMainWindow):
         self.ocr_cancel_event = threading.Event()
         self.recent_files = []
         self.ocr_initialized = False
+        self.init_ui()
         self.last_csv_path = None  # Store the path of the last saved CSV
         self.project_folder = None  # Store the project folder path
         self.low_confidence_cells = []  # Store low-confidence OCR results
         self.table_detection_method = 'Peaks and Troughs'  # Default method
-        self.init_ui()
 
         # Signals for OCR processing
         self.ocr_worker = OcrGui()
@@ -481,7 +503,7 @@ class OCRApp(QMainWindow):
         splitter.addWidget(self.project_list)
         self.project_list.currentRowChanged.connect(self.change_page)
 
-        splitter.setSizes([300, 1600])
+        splitter.setSizes([1900, 200])
 
         self.setCentralWidget(splitter)
 
@@ -582,12 +604,12 @@ class OCRApp(QMainWindow):
         # Navigation: Previous Page and Next Page
         prev_action = QAction('Previous Page', self)
         prev_action.setShortcut('Ctrl+Left')
-        prev_action.triggered.connect(self.previous_page)
+        prev_action.triggered.connect(self.graphics_view.previous_page)
         view_menu.addAction(prev_action)
 
         next_action = QAction('Next Page', self)
         next_action.setShortcut('Ctrl+Right')
-        next_action.triggered.connect(self.next_page)
+        next_action.triggered.connect(self.graphics_view.next_page)
         view_menu.addAction(next_action)
 
         # Text Size Submenu
@@ -751,7 +773,7 @@ class OCRApp(QMainWindow):
             image.save(image_path)
         except Exception as e:
             self.show_error_message(f'Failed to save image: {e}')
-            logger.error(f'Failed to save image: {e}')
+            self.logger.error(f'Failed to save image: {e}')
             return
 
         # Check if there are any cropped areas
@@ -805,7 +827,7 @@ class OCRApp(QMainWindow):
 
                 except Exception as e:
                     self.show_error_message(f'Table detection on cropped area failed: {e}')
-                    logger.error(f'Table detection on cropped area failed: {e}')
+                    self.logger.error(f'Table detection on cropped area failed: {e}')
                     return
         else:
             self.status_bar.showMessage('No cropped areas found, proceeding with full image detection.', 5000)
@@ -830,7 +852,7 @@ class OCRApp(QMainWindow):
                     return
             except Exception as e:
                 self.show_error_message(f'Table detection on full image failed: {e}')
-                logger.error(f'Table detection on full image failed: {e}')
+                self.logger.error(f'Table detection on full image failed: {e}')
                 return
 
             # Convert positions to QLineF objects for drawing lines
@@ -862,7 +884,7 @@ class OCRApp(QMainWindow):
 
     def on_rectangle_selected(self, rect):
         """Handle the event when a rectangle is selected for cropping in the graphics view."""
-        logger.info(f"Cropping area selected on page {self.current_page_index + 1}: {rect}")
+        self.logger.info(f"Cropping area selected on page {self.current_page_index + 1}: {rect}")
         
         # Clear any previously selected rectangle (limit to one rectangle)
         self.graphics_view.clear_rectangles()
@@ -876,14 +898,14 @@ class OCRApp(QMainWindow):
             cropped_image_path = os.path.join(self.project_folder, f"cropped_page_{self.current_page_index + 1}.png")
             
             cropped_image.save(cropped_image_path)
-            logger.info(f"Cropped image saved to {cropped_image_path}")
+            self.logger.info(f"Cropped image saved to {cropped_image_path}")
 
             self.preview_cropped_image(cropped_image)
 
             self.status_bar.showMessage(f"Cropped image saved as {cropped_image_path}", 5000)
         
         except Exception as e:
-            logger.error(f"Error cropping image: {e}")
+            self.logger.error(f"Error cropping image: {e}")
             self.show_error_message(f"Failed to crop image: {e}")
 
     def preview_cropped_image(self, cropped_image):
@@ -898,7 +920,7 @@ class OCRApp(QMainWindow):
 
     def on_line_modified(self):
         """Handle the event when a line is modified in the PDFGraphicsView."""
-        logger.info(f"Line modified on page {self.graphics_view.current_page_index + 1}")
+        self.logger.info(f"Line modified on page {self.graphics_view.current_page_index + 1}")
         
         # You can add additional logic here, such as saving the lines, updating the UI, etc.
         self.save_current_lines()
@@ -907,7 +929,7 @@ class OCRApp(QMainWindow):
         """Save the current lines for the page."""
         lines = self.graphics_view.get_lines()
         self.lines[self.graphics_view.current_page_index] = lines
-        logger.info(f"Lines saved for page {self.graphics_view.current_page_index + 1}")
+        self.logger.info(f"Lines saved for page {self.graphics_view.current_page_index + 1}")
 
     def change_page(self, current_page):
         """Handle page changes when a different page is selected from the project list."""
@@ -933,18 +955,6 @@ class OCRApp(QMainWindow):
 
         self.graphics_view.display_lines(page_lines)
 
-    def next_page(self):
-        """Navigate to the next page and display it."""
-        if self.current_page_index + 1 < len(self.image_file_paths):
-            self.current_page_index += 1
-            self.show_current_page()
-
-    def previous_page(self):
-        """Navigate to the previous page and display it."""
-        if self.current_page_index - 1 >= 0:
-            self.current_page_index -= 1
-            self.show_current_page()
-
     def save_as(self):
         # Implement Save As functionality here
         if not self.last_csv_path or not os.path.exists(self.last_csv_path):
@@ -958,6 +968,7 @@ class OCRApp(QMainWindow):
                     f_out.write(f_in.read())
                 QMessageBox.information(self, 'Save Successful', 'CSV file saved successfully.')
             except Exception as e:
+                self.logger.error(f"Error saving CSV: {e}")
                 self.show_error_message(f'Failed to save CSV: {e}')
   
     def process_files(self, file_paths):
@@ -966,7 +977,7 @@ class OCRApp(QMainWindow):
             for file_path in file_paths:
                 if not os.path.exists(file_path):
                     self.show_error_message(f"File not found: {file_path}")
-                    logger.error(f"File not found: {file_path}")
+                    self.logger.error(f"File not found: {file_path}")
                     continue
 
                 if file_path not in self.recent_files:
@@ -986,7 +997,7 @@ class OCRApp(QMainWindow):
                         self.load_pdf(file_path)
                     except OSError as e:
                         self.show_error_message(f"Error creating project folder: {e}")
-                        logger.error(f"Error creating project folder: {e}")
+                        self.logger.error(f"Error creating project folder: {e}")
                         return  # Stop further processing if project folder creation fails
                     
                 # Handle PNG files
@@ -998,16 +1009,16 @@ class OCRApp(QMainWindow):
                         self.load_image(image)
                     except Exception as e:
                         self.show_error_message(f"Error loading image: {e}")
-                        logger.error(f"Error loading image from {file_path}: {e}")
+                        self.logger.error(f"Error loading image from {file_path}: {e}")
                 
                 # Unsupported file type
                 else:
                     self.show_error_message(f"Unsupported file type: {file_path}")
-                    logger.error(f"Unsupported file type: {file_path}")
+                    self.logger.error(f"Unsupported file type: {file_path}")
 
         except Exception as e:
             self.show_error_message(f"An error occurred while processing files: {e}")
-            logger.error(f"Error in process_files: {e}")
+            self.logger.error(f"Error in process_files: {e}")
 
     def load_pdf(self, file_path):
         """Load the PDF and convert each page to an image, saving them to disk."""
@@ -1021,10 +1032,10 @@ class OCRApp(QMainWindow):
                 temp_dir.mkdir()
 
             # Convert PDF to images and save each page as a separate image file
-            logger.info(f'Attempting to load PDF: {file_path}')
+            self.logger.info(f'Attempting to load PDF: {file_path}')
             self.pdf_images = convert_from_path(file_path, dpi=200)  # Lower DPI to manage memory usage
             total_pages = len(self.pdf_images)
-            logger.info(f'Total pages in the PDF: {total_pages}')
+            self.logger.info(f'Total pages in the PDF: {total_pages}')
 
             if total_pages == 0:
                 raise ValueError('No pages found in the PDF.')
@@ -1061,7 +1072,7 @@ class OCRApp(QMainWindow):
             self.cropping_mode_action.setEnabled(True)
 
         except Exception as e:
-            logger.error(f'Failed to load PDF: {e}', exc_info=True)
+            self.logger.error(f'Failed to load PDF: {e}', exc_info=True)
             QMessageBox.critical(self, 'Error', f'Failed to load PDF: {e}')
             self.status_bar.showMessage('Failed to load PDF', 5000)
 
@@ -1070,7 +1081,7 @@ class OCRApp(QMainWindow):
         try:
             self.project_list.setCurrentRow(page_index + 1)
         except Exception as e:
-            logger.error(f"Error updating page label: {e}")
+            self.logger.error(f"Error updating page label: {e}")
 
     def load_image(self, image_path):
         try:
@@ -1090,6 +1101,7 @@ class OCRApp(QMainWindow):
             self.edit_mode_action.setEnabled(True)
             self.cropping_mode_action.setEnabled(True)
         except Exception as e:
+            self.logger.error(f'Failed to load Image: {e}', exc_info=True)
             self.status_bar.showMessage('Failed to load Image')
             QMessageBox.critical(self, 'Error', f'Failed to load Image: {e}')
 
@@ -1098,7 +1110,7 @@ class OCRApp(QMainWindow):
         try:
             # Check if the current page index is valid
             if not self.image_file_paths or self.current_page_index >= len(self.image_file_paths):
-                logger.error(f'Invalid page index: {self.current_page_index}')
+                self.logger.error(f'Invalid page index: {self.current_page_index}')
                 return
 
             # Load the image for the current page from disk
@@ -1108,7 +1120,7 @@ class OCRApp(QMainWindow):
             self.graphics_view.load_image(qimage)
 
             # Log the successful loading of the page
-            logger.info(f'Successfully displayed page {self.current_page_index + 1}')
+            self.logger.info(f'Successfully displayed page {self.current_page_index + 1}')
 
             # Load existing rectangles if any
             self.graphics_view.clear_rectangles()
@@ -1125,7 +1137,7 @@ class OCRApp(QMainWindow):
             self.graphics_view.display_lines(page_lines)
 
         except Exception as e:
-            logger.error(f"Failed to display page {self.current_page_index}: {e}", exc_info=True)
+            self.logger.error(f"Failed to display page {self.current_page_index}: {e}", exc_info=True)
             self.show_error_message(f"An error occurred while displaying page {self.current_page_index}: {e}")
 
     def save_current_rectangles(self):
@@ -1249,7 +1261,7 @@ class OCRApp(QMainWindow):
             self.status_bar.showMessage(f'OCR Completed. Average time per page: {avg_time:.2f} seconds', 5000)
 
         except Exception as e:
-            logger.error(f"Critical error in OCR task: {e}")
+            self.logger.error(f"Critical error in OCR task: {e}")
             self.ocr_error.emit(f"Critical error: {e}")  # Emit error signal
         finally:
             self.ocr_running = False
@@ -1273,10 +1285,10 @@ class OCRApp(QMainWindow):
                 cropped_image = image.crop((left, top, right, bottom))
                 return cropped_image
             except Exception as e:
-                logger.error(f"Error cropping image: {e}")
+                self.logger.error(f"Error cropping image: {e}")
                 raise ValueError(f"Crop operation failed: {e}")
         else:
-            logger.error(f"Invalid crop dimensions: {left}, {top}, {right}, {bottom}")
+            self.logger.error(f"Invalid crop dimensions: {left}, {top}, {right}, {bottom}")
             raise ValueError("Crop dimensions are out of bounds or invalid.")
 
     def toggle_edit_mode(self):
@@ -1368,9 +1380,9 @@ class OCRApp(QMainWindow):
         error_dialog.exec_()
 
         # Optionally, log the error
-        logger.error(f"Error displayed: {message}")
+        self.logger.error(f"Error displayed: {message}")
         if detailed_message:
-            logger.error(f"Details: {detailed_message}")
+            self.logger.error(f"Details: {detailed_message}")
 
     def on_ocr_completed(self, result):
         """
@@ -1394,7 +1406,7 @@ class OCRApp(QMainWindow):
             rtr.write_to_csv(all_table_data, csv_file_path)
         except Exception as e:
             self.show_error_message(f"Failed to write CSV file: {e}")
-            logger.error(f"Failed to write CSV file: {e}")
+            self.logger.error(f"Failed to write CSV file: {e}")
             return
 
         # Read the CSV content and display it in the GUI's CSV output panel
@@ -1404,7 +1416,7 @@ class OCRApp(QMainWindow):
                 self.csv_output.setPlainText(csv_content)
         except Exception as e:
             self.show_error_message(f"Failed to read CSV file: {e}")
-            logger.error(f"Failed to read CSV file: {e}")
+            self.logger.error(f"Failed to read CSV file: {e}")
 
         self.status_bar.showMessage(f"OCR Completed. Results saved to {csv_file_path}", 5000)
         self.last_csv_path = csv_file_path  # Store the path of the last saved CSV for later use
@@ -1559,27 +1571,70 @@ class OCRApp(QMainWindow):
             temp_dir = Path(dir_name)
             if temp_dir.exists():
                 shutil.rmtree(temp_dir, ignore_errors=True)
-                logger.info(f"Deleted temporary directory: {temp_dir}")
+                self.logger.info(f"Deleted temporary directory: {temp_dir}")
 
     def closeEvent(self, event):
         self.cleanup_temp_images()
         event.accept()
 
 def main():
+    # Configure logging at the very start
+    configure_logging()
+    logger = logging.getLogger(__name__)
+    logger.info("Application started.")
+
+    # Initialize the QApplication
     app = QApplication(sys.argv)
 
+    # Attempt to apply the stylesheet
     try:
-        with open("styles.qss", "r") as style_file:
+        with open("styles.qss", "r", encoding='utf-8') as style_file:
             app.setStyleSheet(style_file.read())
+            logger.info("Stylesheet applied successfully.")
     except FileNotFoundError:
-        print("Style file not found. Proceeding without styles.")
+        logger.warning("Style file 'styles.qss' not found. Proceeding without styles.")
+    except Exception as e:
+        logger.error(f"Unexpected error while loading stylesheet: {e}", exc_info=True)
+        QMessageBox.critical(
+            None,
+            "Error",
+            f"An unexpected error occurred while loading the stylesheet:\n{e}"
+        )
+        sys.exit(1)
 
-    window = OCRApp()
-    window.show()
+    # Initialize and show the main window
+    try:
+        window = OCRApp()
+        window.show()
+        logger.info("Main window initialized and shown successfully.")
+    except Exception as e:
+        logger.critical(f"Failed to initialize the main window: {e}", exc_info=True)
+        QMessageBox.critical(
+            None,
+            "Critical Error",
+            f"Failed to initialize the main window:\n{e}"
+        )
+        sys.exit(1)
 
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    # Handle SIGINT (e.g., Ctrl+C) gracefully
+    try:
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+    except Exception as e:
+        logger.warning(f"Failed to set SIGINT handler: {e}")
 
-    sys.exit(app.exec_())
+    # Execute the application and handle unexpected exceptions during runtime
+    try:
+        logger.info("Entering the main event loop.")
+        sys.exit(app.exec_())
+    except Exception as e:
+        logger.critical(f"An unexpected error occurred during execution: {e}", exc_info=True)
+        QMessageBox.critical(
+            None,
+            "Critical Error",
+            f"An unexpected error occurred during execution:\n{e}"
+        )
+        sys.exit(1)
+
 
 if __name__ == '__main__':
     main()
