@@ -48,7 +48,7 @@ def configure_logging():
     )
 
     # File handler to write logs to a file
-    file_handler = RotatingFileHandler('OCR_app.log', maxBytes=5*1024*1024, backupCount=5, encoding='utf-8')    
+    file_handler = RotatingFileHandler('OCR_app.log', maxBytes=5*1024*1024, backupCount=1, encoding='utf-8')    
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
@@ -463,7 +463,7 @@ class OCRWorker(QThread):
 
 class OCRApp(QMainWindow):
     ocr_completed = pyqtSignal(object)
-    ocr_progress = pyqtSignal(int, int)  # current progress, total tasks
+    ocr_progress = pyqtSignal(int, int)
     ocr_error = pyqtSignal(str)
     logger = logging.getLogger(__name__)
 
@@ -1621,13 +1621,17 @@ class OCRApp(QMainWindow):
         temp_dirs = ['temp_images', 'temp_gui']
         for dir_name in temp_dirs:
             temp_dir = Path(dir_name)
-            if temp_dir.exists():
-                shutil.rmtree(temp_dir, ignore_errors=True)
-                self.logger.info(f"Deleted temporary directory: {temp_dir}")
+            if temp_dir.exists() and temp_dir.is_dir():
+                try:
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                    self.logger.info(f"Deleted temporary directory: {temp_dir}")
+                except Exception as e:
+                    self.logger.error(f"Failed to delete temporary directory {temp_dir}: {e}", exc_info=True)
 
     def closeEvent(self, event):
         self.cleanup_temp_images()
         event.accept()
+
 
 def main():
     # Configure logging at the very start
