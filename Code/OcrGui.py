@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import (
     QGraphicsRectItem, QGraphicsLineItem, QVBoxLayout, QHBoxLayout, QWidget, QSplitter, QTextEdit,
     QMenuBar, QMenu, QToolBar, QLabel, QComboBox, QProgressBar, QStatusBar,
     QPushButton, QMessageBox, QGraphicsPixmapItem, QTableWidget, QTableWidgetItem,
-    QDockWidget, QListWidget, QTabWidget, QInputDialog, QWidgetAction, QActionGroup
+    QDockWidget, QListWidget, QTabWidget, QInputDialog, QWidgetAction, QActionGroup, QTextBrowser, QLineEdit
 )
 from PyQt5.QtGui import QPixmap, QImage, QPen, QColor, QPainter, QFont, QDragEnterEvent, QDropEvent
 from PyQt5.QtCore import Qt, QRectF, QObject, pyqtSignal, QLineF, QThread
@@ -58,7 +58,6 @@ def configure_logging():
     console_handler.setLevel(logging.INFO)  # Adjust as needed
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
-
 
 class EmittingStream(QObject):
     textWritten = pyqtSignal(str)
@@ -509,9 +508,9 @@ class OCRApp(QMainWindow):
 
         self.init_menu_bar()
 
-        self.init_tool_bar()
-
         self.init_output_dock()
+
+        self.init_tool_bar()
 
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
@@ -645,7 +644,7 @@ class OCRApp(QMainWindow):
         help_menu = menu_bar.addMenu('Help')
 
         how_to_use_action = QAction('How to Use', self)
-        how_to_use_action.triggered.connect(lambda: self.show_help_tab('How to Use', 'Instructions on how to use the application.'))
+        how_to_use_action.triggered.connect(self.show_help_tab_from_file)
         help_menu.addAction(how_to_use_action)
 
         terms_action = QAction('Terms of Service', self)
@@ -706,6 +705,11 @@ class OCRApp(QMainWindow):
         self.export_excel_action.triggered.connect(self.export_to_excel)
         self.export_excel_action.setEnabled(False)  # Initially disabled
         tool_bar.addAction(self.export_excel_action)
+        
+        # Add 'Show Output' button using the dock's toggleViewAction
+        show_output_action = self.output_dock.toggleViewAction()
+        show_output_action.setText('Show dock')
+        tool_bar.addAction(show_output_action)
 
     def init_output_dock(self):
         # Output Dock
@@ -734,6 +738,54 @@ class OCRApp(QMainWindow):
         self.output_tabs.setCurrentWidget(self.log_output)
 
         self.addDockWidget(Qt.BottomDockWidgetArea, self.output_dock)
+
+    def show_help_tab(self, title, content):
+        try:
+            # Create a QWidget to hold the QTextBrowser
+            help_widget = QWidget()
+            layout = QVBoxLayout()
+            help_widget.setLayout(layout)
+
+            # Create a QTextBrowser to display the text content
+            text_browser = QTextBrowser()
+            text_browser.setPlainText(content)  # Use setPlainText for plain text
+            text_browser.setReadOnly(True)
+            text_browser.setOpenExternalLinks(True)  # Enable clickable links if any
+
+            layout.addWidget(text_browser)
+
+            # Check if the tab already exists
+            for index in range(self.tab_widget.count()):
+                if self.tab_widget.tabText(index) == title:
+                    self.tab_widget.setCurrentIndex(index)
+                    return
+
+            # Add the help_widget as a new tab
+            self.tab_widget.addTab(help_widget, title)
+            self.tab_widget.setCurrentWidget(help_widget)
+
+            self.logging.info(f"Help tab '{title}' displayed successfully.")
+        except Exception as e:
+            self.logging.error(f"Error displaying help tab: {e}", exc_info=True)
+            QMessageBox.critical(self, "Error", f"An error occurred while displaying help:\n{e}")
+
+    def show_help_tab_from_file(self):
+        try:
+            help_file_path = os.path.join(os.path.dirname(__file__), 'help.txt')
+            if not os.path.exists(help_file_path):
+                self.logging.error(f"Help file not found at {help_file_path}")
+                QMessageBox.warning(self, "Help File Missing", f"The help file 'help.txt' was not found in the application directory.")
+                return
+
+            with open(help_file_path, 'r', encoding='utf-8') as file:
+                help_content = file.read()
+
+            # Display the help content in a new tab
+            self.show_help_tab("How to Use", help_content)
+
+        except Exception as e:
+            self.logging.error(f"Failed to load help file: {e}", exc_info=True)
+            QMessageBox.critical(self, "Error", f"An error occurred while loading the help file:\n{e}")
 
     def update_progress_bar(self, tasks_completed, total_tasks):
         self.progress_bar.setValue(tasks_completed)

@@ -1,0 +1,216 @@
+1. Getting Started
+
+Upon launching the OCR Application, you'll be greeted with a user-friendly interface designed to facilitate seamless OCR processing and data management. Here's how to get started:
+
+    Launch the Application:
+        Double-click the OcrGui.py file or run the command python OcrGui.py in your terminal.
+
+    Load a PDF File:
+        Navigate to File > Open or press Ctrl + O to select and load a PDF document for OCR processing.
+
+    Explore Features:
+        Utilize the menu bar and toolbar to access various functionalities like OCR processing, editing, and exporting data.
+
+2. User Interface Overview
+
+The OCR Application's interface is divided into several key components:
+
+    Menu Bar:
+        Located at the top, it provides access to File, Edit, View, Table Detection Method, and Help menus.
+
+    Toolbar:
+        Positioned below the menu bar, it offers quick access to actions like initializing OCR, running OCR, undo/redo actions, and exporting data.
+
+    PDF Preview Pane:
+        The central area displays the loaded PDF document, allowing you to navigate through pages and perform edits.
+
+    Status Bar:
+        Located at the bottom, it shows information such as the current page number and processing status.
+
+3. Opening a PDF File
+
+To perform OCR on a PDF document, you first need to load it into the application:
+
+    Via Menu Bar:
+        Click on File > Open or use the shortcut Ctrl + O.
+        Browse and select the desired PDF file from your system.
+
+    Drag and Drop:
+        Drag the PDF file from your file explorer and drop it onto the PDF Preview Pane.
+
+    Recent Files:
+        Access recently opened files via File > Recent Files and select the desired document.
+
+4. Navigating Through Pages
+
+Once a PDF is loaded, you can navigate through its pages using the following methods:
+4.1. Menu Bar Actions
+
+    Next Page:
+        Click on View > Next Page or use the shortcut Ctrl + Right Arrow to move to the next page.
+
+    Previous Page:
+        Click on View > Previous Page or use the shortcut Ctrl + Left Arrow to return to the previous page.
+
+4.2. Keyboard Shortcuts
+
+    Next Page: Ctrl + Right Arrow
+    Previous Page: Ctrl + Left Arrow
+    Jump to Page: Use specific keyboard shortcuts if implemented or use the status bar controls.
+
+4.3. Status Bar Controls
+
+    Page Navigation:
+        Some implementations may include clickable page numbers or navigation buttons in the status bar for quick access.
+
+5. Running OCR Processing
+
+Performing OCR on your loaded PDF allows you to extract text and tables for further use.
+5.1. Initialize OCR Engines
+
+Before running OCR, ensure that the OCR engines are initialized:
+
+    Via Toolbar:
+        Click on the Initialize OCR button in the toolbar.
+
+    Menu Bar:
+        Navigate to OCR > Initialize OCR if such an option exists.
+
+    Progress Indicator:
+        A progress bar or indicator will display the initialization status.
+
+5.2. Run OCR
+
+Once initialized, you can start the OCR process:
+
+    Via Toolbar:
+        Click on the Run OCR button.
+
+    Menu Bar:
+        Navigate to OCR > Run OCR if available.
+
+    Progress Monitoring:
+        Monitor the OCR progress through the progress bar or status messages.
+
+    Completion Notification:
+        Upon completion, a notification will inform you, and the extracted data will be available for review and editing.
+
+6. Editing PDF Content
+
+The application allows you to make annotations and edits to your PDF document, enhancing the accuracy of OCR results.
+6.1. Adding Rectangles and Lines
+
+Use the editing tools to highlight or demarcate specific areas in your PDF:
+
+    Select Editing Mode:
+        Click on the Editing Mode toggle button in the toolbar to activate editing features.
+
+    Add Rectangle:
+        Select the Add Rectangle tool from the toolbar.
+        Click and drag on the PDF Preview Pane to draw a rectangle around the desired area.
+
+    Add Line:
+        Select the Add Line tool.
+        Click and drag to draw a line across the PDF page.
+
+    Modify Annotations:
+        Select existing rectangles or lines to move, resize, or delete them as needed.
+
+6.2. Undo and Redo Actions
+
+Mistakes happen! The application provides undo and redo functionalities to manage your edits efficiently.
+
+    Undo Action:
+        Click on the Undo button in the toolbar or use the shortcut Ctrl + Z to revert the last action.
+
+    Redo Action:
+        Click on the Redo button or use the shortcut Ctrl + Y to reapply an undone action.
+
+    Menu Bar:
+        Access these actions via Edit > Undo and Edit > Redo respectively.
+
+7. Saving and Exporting Data
+
+After performing OCR and making necessary edits, you can save or export the extracted data for external use.
+7.1. Saving as CSV
+
+Export the extracted table data into a CSV file for easy integration with other applications.
+
+    Via Toolbar:
+        Click on the Save CSV button.
+
+    Menu Bar:
+        Navigate to File > Save CSV.
+
+    Choose Save Location:
+        Select the desired directory and filename for the CSV file.
+
+    Confirmation:
+        A confirmation message will notify you upon successful saving.
+
+7.2. Exporting to Excel
+
+Convert the extracted data into an Excel spreadsheet for more advanced data manipulation.
+
+    Via Toolbar:
+        Click on the Export to Excel button.
+
+    Menu Bar:
+        Navigate to File > Export to Excel.
+
+    Select Destination:
+        Choose the save location and filename for the Excel file.
+
+    Completion:
+        Receive a notification once the export is successfully completed.
+
+8. Managing Recent Files
+
+Quickly access your recently opened PDF files without navigating through directories each time.
+
+    Accessing Recent Files:
+        Go to File > Recent Files in the menu bar.
+
+    Opening a Recent File:
+        Click on the desired file from the list to open it instantly.
+
+    Handling Missing Files:
+        If a recent file has been moved or deleted, a warning message will inform you, and the file will be removed from the recent list.
+
+9. Settings and Preferences
+
+Customize the application's behavior and appearance to suit your workflow.
+11.1. Table Detection Methods
+
+Choose between different methods for detecting tables within your PDF documents to optimize OCR accuracy.
+
+    Accessing Table Detection Settings:
+        Navigate to Table Detection Method in the menu bar.
+
+    Available Methods:
+        Peaks and Troughs:
+            Utilizes peaks and troughs in the document's structure to identify tables.
+        Transitions:
+            Detects tables based on transitions in text flow and formatting.
+
+    Selecting a Method:
+        Click on your preferred method to activate it. Only one method can be active at a time.
+
+    Effect on OCR:
+        The selected method will influence how tables are recognized and extracted during OCR processing.
+
+9.2. Adjusting Text Size
+
+Modify the size of text within the PDF Preview Pane to enhance readability.
+
+    Accessing Text Size Settings:
+        Go to View > Text Size in the menu bar.
+
+    Available Sizes:
+        Select from predefined text sizes: 16, 18, 20, 22, 24, 26, 28, 30.
+
+    Applying Changes:
+        Click on the desired size to apply it instantly.
+
+    Effect on Display:
+        The PDF content will adjust to the selected text size, improving visibility based on your preference.
