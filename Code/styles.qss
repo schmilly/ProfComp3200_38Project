@@ -1,0 +1,102 @@
+/* styles.qss */
+
+/* General Widget Styling */
+QWidget {
+    background-color: #C0C0C0;  /* Light gray background */
+    color: black;
+    font-family: Arial;
+    font-size: 10pt;
+}
+
+/* Buttons */
+QPushButton {
+    background-color: #E0E0E0;
+    border: 1px solid #808080;
+    padding: 5px;
+}
+
+QPushButton:hover {
+    background-color: #D0D0D0;
+}
+
+/* Menus */
+QMenuBar {
+    background-color: #C0C0C0;
+}
+
+QMenuBar::item {
+    background-color: #C0C0C0;
+    color: black;
+    padding: 5px 10px;
+}
+
+QMenuBar::item:selected {
+    background-color: #000080;
+    color: white;
+}
+
+/* Toolbars */
+QToolBar {
+    background-color: #C0C0C0;
+    border: none;
+}
+
+QToolButton {
+    background-color: #E0E0E0;
+    border: 1px solid #808080;
+    margin: 2px;
+    padding: 5px;
+}
+
+QToolButton:hover {
+    background-color: #D0D0D0;
+}
+
+/* Status Bar */
+QStatusBar {
+    background-color: #C0C0C0;
+}
+
+/* Tabs */
+QTabWidget::pane {
+    border: 1px solid #808080;
+}
+
+QTabBar::tab {
+    background-color: #E0E0E0;
+    border: 1px solid #808080;
+    padding: 5px;
+}
+
+QTabBar::tab:selected {
+    background-color: #C0C0C0;
+}
+
+/* Scrollbars */
+QScrollBar {
+    background-color: #E0E0E0;
+}
+
+/* Text Edits */
+QTextEdit, QLineEdit {
+    background-color: white;
+    color: black;
+    border: 1px solid #808080;
+}
+
+/* List Widgets */
+QListWidget {
+    background-color: white;
+    border: 1px solid #808080;
+}
+
+/* Table Widgets */
+QTableWidget {
+    background-color: white;
+    border: 1px solid #808080;
+}
+
+/* Dialogs */
+QDialog {
+    background-color: #C0C0C0;
+}
