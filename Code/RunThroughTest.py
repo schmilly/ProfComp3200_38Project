@@ -1,12 +1,13 @@
+# ocr_module 
+
 import os
 import time
 import logging
 import csv
 from pathlib import Path
 import pdf_to_image
-from TableDetection import *
-from Cellularize import *
-from OCRCompare import *
+from TableDetection import luminositybased
+from Cellularize import cellularize_Page_colrow
 from paddleocr import PaddleOCR
 from PIL import Image, ImageEnhance, ImageFilter
 import easyocr
@@ -73,7 +74,7 @@ def perform_easyocr(image, reader):
     else:
         return '', 0
 
-def process_image(filename):
+def process_image(filename, ocr, reader):
     """Process a single image and perform OCR."""
     # Extract row and column indices from filename
     parts = filename.split('_')
@@ -121,75 +122,50 @@ def process_image(filename):
     
     return (row_index, col_index, best_text, best_confidence, source, filename)
 
-def main():
-    start_time = time.time()
-
-    storedir = "temp"
-    if not os.path.exists(storedir):
-        os.makedirs(storedir)
-
-    pdf_file = Path("..") / "Examples" / "2Page_AUSTRIA_1890_T2_g0bp.pdf"
-    if not pdf_file.exists():
-        raise FileNotFoundError(f"PDF file not found: {pdf_file.resolve()}")
-
-    # Convert PDF to images
+def convert_pdf_to_images(pdf_file_path, output_dir):
+    """Converts PDF to images and saves them to output_dir."""
     image_list = []
     counter = 0
-    page_num = 0
-    for i in pdf_to_image.pdf_to_images(str(pdf_file)):
-        name = os.path.join(storedir, f"Document_{counter}.png")
+    for i in pdf_to_image.pdf_to_images(pdf_file_path):
+        name = os.path.join(output_dir, f"Document_{counter}.png")
         i.save(name)
         image_list.append(os.path.join(str(Path.cwd()), name))
         counter += 1
+    return image_list
 
-    # Detect tables and cellularize
+def detect_tables_in_images(image_list):
+    """Detects tables in images and returns a TableMap."""
     TableMap = []
     for filepath in image_list:
         TableCoords = luminositybased.findTable(filepath, "borderless", "borderless")
         FormattedCoords = [luminositybased.convert_to_pairs(CordList) for CordList in TableCoords]
         TableMap.append(FormattedCoords)
+    return TableMap
 
+def cellularize_images(image_list, TableMap, page_num=0):
+    """Splits the images into cells based on detected table coordinates."""
     locationlists = []
     for index, Table in enumerate(TableMap):
         locationlists.append(cellularize_Page_colrow(image_list[index], Table[1], Table[0], page_num + index))
+    return locationlists
 
-    output_csv = 'output.csv'
+def process_all_images(all_filenames, ocr, reader):
+    """Processes all cell images and collects results."""
+    results = []
+    for filename in tqdm(all_filenames, desc="Processing images"):
+        result = process_image(filename, ocr, reader)
+        results.append(result)
+    return results
+
+def process_results(results):
+    """Processes OCR results and returns aggregated data."""
     table_data = {}
     total = 0
     bad = 0
     easyocr_count = 0
     paddleocr_count = 0
+    low_confidence_results = []
 
-    # Flatten the list of image filenames
-    all_filenames = [filename for collection in locationlists for filename in collection]
-
-    # Initialize OCR engines once in the main thread
-    use_gpu = paddle.device.is_compiled_with_cuda()
-    global ocr
-    global reader
-    ocr = PaddleOCR(
-        use_angle_cls=True,
-        lang='en',
-        rec_model_dir='en_PP-OCRv4_rec',
-        version='PP-OCRv4',
-        det_db_thresh=0.35,
-        det_db_box_thresh=0.45,
-        det_db_unclip_ratio=1.8,
-        cls_thresh=0.95,
-        use_space_char=True,
-        rec_image_shape='3, 48, 320',
-        det_limit_side_len=960,
-        use_gpu=use_gpu
-    )
-    reader = easyocr.Reader(['en'], gpu=use_gpu)
-
-    # Process images sequentially with a progress bar
-    results = []
-    for filename in tqdm(all_filenames, desc="Processing images"):
-        result = process_image(filename)
-        results.append(result)
-
-    # Process the results
     for result in results:
         if result is None:
             continue
@@ -204,20 +180,29 @@ def main():
 
         if best_confidence < 0.8:
             bad += 1
-            print(f"Review needed for {filename}: {best_text} (Confidence: {best_confidence}, Source: {source})")
+            # Collect low-confidence results to display at the end
+            low_confidence_results.append(
+                f"Review needed for {filename}: {best_text} (Confidence: {best_confidence}, Source: {source})"
+            )
 
         if row_index not in table_data:
             table_data[row_index] = {}
         table_data[row_index][col_index] = best_text
 
-    # Write results to CSV
+    return table_data, total, bad, easyocr_count, paddleocr_count
+
+def write_results_to_csv(table_data, output_csv):
+    """Writes the table data to a CSV file."""
     max_columns = max(max(cols.keys()) for cols in table_data.values())
     with open(output_csv, mode='w', newline='') as file:
         writer = csv.writer(file)
         for row_index in sorted(table_data.keys()):
             row = [table_data[row_index].get(col_index, "") for col_index in range(max_columns + 1)]
             writer.writerow(row)
+    print(f"Results saved to {output_csv}")
 
+def display_statistics(total, bad, easyocr_count, paddleocr_count):
+    """Displays statistics about the OCR results."""
     if total > 0:
         print(f"Percentage less than 80% confidence score is {bad / total * 100:.2f}% with {bad} possibly wrong")
     else:
@@ -227,7 +212,8 @@ def main():
     print(f"Results using EasyOCR: {easyocr_count}")
     print(f"Results using PaddleOCR: {paddleocr_count}")
 
-    # Cleanup
+def cleanup(storedir):
+    """Delete temporary files and directory."""
     for file in os.listdir(storedir):
         file_path = os.path.join(storedir, file)
         try:
@@ -239,6 +225,72 @@ def main():
         os.rmdir(storedir)
     except Exception as e:
         print(f"Error removing directory {storedir}: {e}")
+
+def initialize_paddleocr(use_gpu):
+    """Initializes and returns a PaddleOCR engine."""
+    ocr = PaddleOCR(
+        use_angle_cls=True,
+        lang='en',
+        rec_model_dir='en_PP-OCRv4_rec',
+        version='PP-OCRv4',
+        det_db_thresh=0.35,
+        det_db_box_thresh=0.45,
+        det_db_unclip_ratio=1.8,
+        cls_thresh=0.95,
+        use_space_char=True,
+        rec_image_shape='3, 48, 320',
+        det_limit_side_len=960,
+        use_gpu=use_gpu
+    )
+    return ocr
+
+def initialize_easyocr(use_gpu):
+    """Initializes and returns an EasyOCR reader."""
+    reader = easyocr.Reader(['en'], gpu=use_gpu)
+    return reader
+
+def main():
+    start_time = time.time()
+
+    storedir = "temp"
+    if not os.path.exists(storedir):
+        os.makedirs(storedir)
+
+    pdf_file = Path("..") / "Examples" / "2Page_AUSTRIA_1890_T2_g0bp.pdf"
+    if not pdf_file.exists():
+        raise FileNotFoundError(f"PDF file not found: {pdf_file.resolve()}")
+
+    # Convert PDF to images
+    image_list = convert_pdf_to_images(str(pdf_file), storedir)
+
+    # Detect tables and cellularize
+    TableMap = detect_tables_in_images(image_list)
+    locationlists = cellularize_images(image_list, TableMap)
+
+    output_csv = 'output.csv'
+
+    # Flatten the list of image filenames
+    all_filenames = [filename for collection in locationlists for filename in collection]
+
+    # Initialize OCR engines once in the main thread
+    use_gpu = paddle.device.is_compiled_with_cuda()
+    ocr = initialize_paddleocr(use_gpu)
+    reader = initialize_easyocr(use_gpu)
+
+    # Process images
+    results = process_all_images(all_filenames, ocr, reader)
+
+    # Process the results
+    table_data, total, bad, easyocr_count, paddleocr_count = process_results(results)
+
+    # Write results to CSV
+    write_results_to_csv(table_data, output_csv)
+
+    # Display statistics
+    display_statistics(total, bad, easyocr_count, paddleocr_count)
+
+    # Cleanup
+    cleanup(storedir)
 
     end_time = time.time()
     elapsed_time = end_time - start_time
