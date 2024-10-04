@@ -11,6 +11,7 @@ import signal
 import shutil
 import csv
 import traceback
+import pickle
 from email.message import EmailMessage
 
 # Third-party imports
