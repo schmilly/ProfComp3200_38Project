@@ -1,6 +1,7 @@
 # Standard library imports
 import sys
 import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 from pathlib import Path
 import logging
 import mimetypes
@@ -11,6 +12,7 @@ import smtplib
 import pickle
 import shutil
 import csv
+import traceback
 from email.message import EmailMessage
 
 # Third-party imports
@@ -33,9 +35,9 @@ from PIL import Image
 from logging.handlers import RotatingFileHandler
 
 # Local imports
-#from RunThroughRefactor_1 import run_ocr_pipeline
-#import RunThroughRefactor_1 as rtr
-#import luminosity_table_detection as ltd
+from ocr_pipe import run_ocr_pipeline
+import ocr_pipe as rtr
+import luminosity_table_detection as ltd
 
 def configure_logging():
     """Configures the logging settings."""
@@ -440,7 +442,6 @@ class OCRWorker(QThread):
     ocr_progress = pyqtSignal(int, int)
     ocr_completed = pyqtSignal(object)
     ocr_error = pyqtSignal(str)
-    logger = logging.getLogger(__name__)
 
     def __init__(self, pdf_file, storedir, output_csv, ocr_cancel_event):
         super().__init__()
@@ -452,14 +453,26 @@ class OCRWorker(QThread):
     def run(self):
         try:
             # Run OCR processing here
-            all_table_data, total, bad, easyocr_count, paddleocr_count, processing_time = run_ocr_pipeline(
-                self.pdf_file, self.storedir, self.output_csv, self.ocr_progress, self.ocr_cancel_event
+            results = run_ocr_pipeline(
+                self.pdf_file,
+                self.storedir,
+                self.output_csv,
+                self.ocr_progress,
+                self.ocr_cancel_event
             )
             # Emit completion signal with results
-            self.ocr_completed.emit((all_table_data, total, bad, easyocr_count, paddleocr_count, processing_time))
+            self.ocr_completed.emit(results)
         except Exception as e:
-            self.logger.error(f"Error in OCRWorker: {e}", exc_info=True)
+            # Capture the exception traceback
+            tb = traceback.format_exc()
+            self.logger.error(f"Error in OCRWorker: {e}\n{tb}")
+            # Emit error signal with the exception message
             self.ocr_error.emit(str(e))
+
+    def cancel(self):
+        """Method to cancel the OCR process."""
+        self.ocr_cancel_event.set()
+        self.logger.info("OCR cancellation requested.")
 
 class OCRApp(QMainWindow):
     ocr_completed = pyqtSignal(object)
