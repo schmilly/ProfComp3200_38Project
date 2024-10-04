@@ -5,6 +5,7 @@ import shutil
 import random
 import string
 import unittest
+import pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 sys.path.append('..')
@@ -18,8 +19,8 @@ class TestOCRToCSV(unittest.TestCase):
     def setUpClass(cls):
         """Set up the test environment once for all tests."""
         cls.source_dir = Path(__file__).resolve().parent / 'Cellularised-Example'
-        cls.test_dir = 'test_images'
-        cls.output_csv = 'test_output.csv'
+        cls.test_dir = Path(__file__).resolve().parent / 'test_images'
+        cls.output_csv = Path(__file__).resolve().parent / 'test_output.csv'
         cls.preprocessor = ImagePreprocessor(contrast=3, sharpness=2)
         os.makedirs(cls.test_dir, exist_ok=True)
 
