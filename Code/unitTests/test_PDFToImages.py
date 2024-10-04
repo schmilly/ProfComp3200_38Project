@@ -4,6 +4,7 @@ import unittest
 import tracemalloc
 import warnings
 from PIL import Image, ImageDraw
+from pathlib import Path
 from pdf_to_image import pdf_to_images, enhance_image
 
 sys.path.append('..')
@@ -16,8 +17,8 @@ class TestPDFToImages(unittest.TestCase):
         tracemalloc.start()
         warnings.simplefilter("ignore", ResourceWarning)
 
-        cls.test_pdf_dir = r'C:\Users\olive\OneDrive\Desktop\CompSci\2024_semester_2\cits3200\ProfComp3200_38Project\Examples'
-        cls.output_dir = 'test_images'
+        cls.test_pdf_dir = Path(__file__).resolve().parent.parent.parent / 'Examples'
+        cls.output_dir = Path(__file__).resolve().parent / 'test_images'
         cls.test_pdfs = []
 
         for filename in os.listdir(cls.test_pdf_dir):

@@ -40,7 +40,9 @@ import luminosity_table_detection as ltd
 
 # Manual table detection imports
 from tkinter import Tk
-from table_detection_manual import TableDividerApp  # Assuming your table detection code is in a separate file
+from table_detection_manual import TableDividerApp
+
+
 
 def configure_logging():
     """Configures the logging settings."""
@@ -761,10 +763,19 @@ class OCRApp(QMainWindow):
     def start_manual_table_detection(self):
         """Open the manual table detection tool."""
         self.hide()  # Hide the main PyQt window
-        root = Tk()  # Start Tkinter root
-        self.manual_table_app = TableDividerApp(root, self.pdf_images)  # Pass images to the manual detection tool
-        root.mainloop()  # Run the Tkinter event loop
-        self.show()  # Show the main window after manual table detection
+
+        # Create a separate thread to run Tkinter alongside PyQt
+        def run_tkinter():
+            root = Tk()  # Start Tkinter root
+            self.manual_table_app = TableDividerApp(root, self.pdf_images)  # Pass images to the manual detection tool
+            root.mainloop()  # Run the Tkinter event loop
+
+            # After Tkinter closes, show the PyQt window again
+            self.show()
+
+        # Create and start the thread
+        threading.Thread(target=run_tkinter).start()
+
 
     def update_progress_bar(self, tasks_completed, total_tasks):
         self.progress_bar.setValue(tasks_completed)
