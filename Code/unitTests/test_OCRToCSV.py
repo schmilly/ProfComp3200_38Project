@@ -5,7 +5,7 @@ import shutil
 import random
 import string
 import unittest
-import pathlib import Path
+from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 sys.path.append('..')

@@ -46,7 +46,7 @@ jobs:
         
     - name: Test with Imot Test
       run: |
-        python -m unittest discover -s unitTests -p 'test*'
+        python -m unittest discover -s unitTests -p 'test_*'
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
