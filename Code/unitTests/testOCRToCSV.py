@@ -17,7 +17,7 @@ class TestOCRToCSV(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up the test environment once for all tests."""
-        cls.source_dir = r'C:\Users\olive\OneDrive\Desktop\CompSci\2024_semester_2\cits3200\ProfComp3200_38Project\Code\unitTests\Cellularised-Example'
+        cls.source_dir = Path(__file__).resolve().parent / 'Cellularised-Example'
         cls.test_dir = 'test_images'
         cls.output_csv = 'test_output.csv'
         cls.preprocessor = ImagePreprocessor(contrast=3, sharpness=2)
