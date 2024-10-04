@@ -1,4 +1,4 @@
-# ocr_module 
+# ocr_module
 
 import os
 import time
@@ -182,14 +182,14 @@ def process_results(results):
             bad += 1
             # Collect low-confidence results to display at the end
             low_confidence_results.append(
-                f"Review needed for {filename}: {best_text} (Confidence: {best_confidence}, Source: {source})"
+                f"Review needed for {filename}: {best_text} (Confidence: {best_confidence:.2f}, Source: {source})"
             )
 
         if row_index not in table_data:
             table_data[row_index] = {}
         table_data[row_index][col_index] = best_text
 
-    return table_data, total, bad, easyocr_count, paddleocr_count
+    return table_data, total, bad, easyocr_count, paddleocr_count, low_confidence_results
 
 def write_results_to_csv(table_data, output_csv):
     """Writes the table data to a CSV file."""
@@ -281,10 +281,16 @@ def main():
     results = process_all_images(all_filenames, ocr, reader)
 
     # Process the results
-    table_data, total, bad, easyocr_count, paddleocr_count = process_results(results)
+    table_data, total, bad, easyocr_count, paddleocr_count, low_confidence_results = process_results(results)
 
     # Write results to CSV
     write_results_to_csv(table_data, output_csv)
+
+    # Print low-confidence results
+    if low_confidence_results:
+        print("\nLow-confidence OCR results:")
+        for msg in low_confidence_results:
+            print(msg)
 
     # Display statistics
     display_statistics(total, bad, easyocr_count, paddleocr_count)
