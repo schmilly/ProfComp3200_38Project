@@ -14,6 +14,8 @@ import shutil
 import csv
 import traceback
 from email.message import EmailMessage
+from PyPDF2 import PdfFileReader
+import PyPDF2
 
 # Third-party imports
 import cv2
@@ -24,7 +26,7 @@ import urllib.parse
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QAction, QFileDialog, QGraphicsView, QGraphicsScene,
     QGraphicsRectItem, QGraphicsLineItem, QVBoxLayout, QHBoxLayout, QWidget, QSplitter, QTextEdit,
-    QMenuBar, QMenu, QToolBar, QLabel, QComboBox, QProgressBar, QStatusBar,
+    QMenuBar, QMenu, QToolBar, QLabel, QComboBox, QProgressBar, QStatusBar, QTreeWidget, QTreeWidgetItem,
     QPushButton, QMessageBox, QGraphicsPixmapItem, QTableWidget, QTableWidgetItem,
     QDockWidget, QListWidget, QTabWidget, QInputDialog, QWidgetAction, QActionGroup, QTextBrowser, QLineEdit
 )
@@ -90,6 +92,7 @@ class LineItem(QGraphicsLineItem):
 class PDFGraphicsView(QGraphicsView):
     rectangleSelected = pyqtSignal(QRectF)
     lineModified = pyqtSignal()
+    croppedImageCreated = pyqtSignal(int, int, str)
     logger = logging.getLogger(__name__)
 
     def __init__(self, parent=None):
@@ -130,39 +133,6 @@ class PDFGraphicsView(QGraphicsView):
             self.logger.error(f"Error in get_main_window: {e}")
             raise
 
-    def pil_image_to_qimage(self, pil_image):
-        """Convert PIL Image to QImage."""
-        try:
-            if pil_image.mode == "RGB":
-                r, g, b = pil_image.split()
-                pil_image = Image.merge("RGB", (r, g, b))
-            elif pil_image.mode == "RGBA":
-                r, g, b, a = pil_image.split()
-                pil_image = Image.merge("RGBA", (r, g, b, a))
-            elif pil_image.mode == "L":
-                pil_image = pil_image.convert("RGBA")
-            else:
-                pil_image = pil_image.convert("RGBA")
-            data = pil_image.tobytes("raw", pil_image.mode)
-            qimage = QImage(data, pil_image.width, pil_image.height, QImage.Format_RGBA8888)
-            return qimage
-        except Exception as e:
-            self.logger.error(f"Error converting PIL image to QImage: {e}")
-            self.get_main_window().show_error_message(f"An error occurred while converting image: {e}")
-            return QImage()
-
-    def load_pdf(self, file_path):
-        """Load a PDF and convert each page into a QImage."""
-        try:
-            pil_images = convert_from_path(file_path)  # Convert PDF to list of PIL Images
-            # Convert PIL Images to QImages
-            self.pdf_images = [self.pil_image_to_qimage(pil_img) for pil_img in pil_images]
-            self.current_page_index = 0  # Start from the first page
-            self.load_image(self.pdf_images[self.current_page_index])  # Load the first page
-        except Exception as e:
-            self.get_main_window().show_error_message(f"Error loading PDF: {e}")
-            self.logger.error(f"Error loading PDF: {e}")
-
     def next_page(self):
         """Navigate to the next page of the PDF."""
         try:
@@ -188,26 +158,34 @@ class PDFGraphicsView(QGraphicsView):
         except Exception as e:
             self.logger.error(f"Error in previous_page: {e}")
             self.get_main_window().show_error_message(f"An error occurred: {e}")
-
-    def load_image(self, image):
+   
+    def load_image(self, qimage):
         """Load a QImage into the scene."""
         try:
             self.scene().clear()
-            qt_image = QPixmap.fromImage(image)
-            self._pixmap_item = QGraphicsPixmapItem(qt_image)
+            qt_pixmap = QPixmap.fromImage(qimage)
+            if qt_pixmap.isNull():
+                raise ValueError("Failed to convert QImage to QPixmap.")
+            self._pixmap_item = QGraphicsPixmapItem(qt_pixmap)
             self.scene().addItem(self._pixmap_item)
             self.fitInView(self._pixmap_item, Qt.KeepAspectRatio)
             self._rect_items.clear()
             self._line_items.clear()
+
+            # Reset any transformations
+            self._pixmap_item.setRotation(0)
+            self._pixmap_item.setScale(1)
         except Exception as e:
-            self.logger.error(f"Error loading image into scene: {e}")
-            self.get_main_window().show_error_message(f"An error occurred while loading image: {e}")
+            self.logger.error(f"Error loading image into scene: {e}", exc_info=True)
+            self.show_error_message(f"An error occurred while loading image: {e}")
 
     def mousePressEvent(self, event):
         try:
             if event.button() == Qt.LeftButton:
+                # Check if the cropping mode is enabled
                 main_window = self.get_main_window()  # Get the OCRApp instance
                 if main_window.cropping_mode_action.isChecked():
+                    # Start drawing a new rectangle
                     self._start_pos = self.mapToScene(event.pos())
                     self._current_rect_item = QGraphicsRectItem(QRectF(self._start_pos, self._start_pos))
                     pen = QPen(QColor(255, 0, 0), 2)
@@ -217,10 +195,11 @@ class PDFGraphicsView(QGraphicsView):
                     super().mousePressEvent(event)
             else:
                 super().mousePressEvent(event)
+
         except Exception as e:
             self.logger.error(f"Error in mousePressEvent: {e}")
             self.get_main_window().show_error_message(f"An error occurred: {e}")
-
+            
     def mouseMoveEvent(self, event):
         try:
             if self._current_rect_item:
@@ -234,19 +213,37 @@ class PDFGraphicsView(QGraphicsView):
 
     def mouseReleaseEvent(self, event):
         try:
-            if event.button() == Qt.LeftButton and self._current_rect_item:
-                self._rect_items.append(self._current_rect_item)
-                self.rectangleSelected.emit(self._current_rect_item.rect())
-                self._current_rect_item = None
-                # Save the rectangle as a cropped area if in cropping mode
-                if self.cropping_mode:
-                    rect = self._rect_items[-1].rect()  # Use the most recent rectangle
-                    self.cropped_areas.append(rect)
+            if event.button() == Qt.LeftButton:
+                if self._current_rect_item and self._start_pos:
+                    end_pos = self.mapToScene(event.pos())
+                    rect = QRectF(self._start_pos, end_pos).normalized()
+                    main_window = self.get_main_window()
+                    if main_window.cropping_mode_action.isChecked():
+                        if not rect.isEmpty():
+                            # Handle the cropping action
+                            # Instead of directly calling on_rectangle_selected, emit a signal
+                            cropped_image_path, page_index, cropped_index = main_window.on_rectangle_selected(rect)
+                            if cropped_image_path:
+                                self.croppedImageCreated.emit(page_index, cropped_index, cropped_image_path)
+
+                            # Turn off cropping mode after cropping is done
+                            main_window.cropping_mode_action.setChecked(False)
+                            self.logger.info("Cropping mode turned off after cropping action.")
+                        else:
+                            self.logger.warning("Empty rectangle on mouse release; ignoring cropping action.")
+
+                    # Reset the state after releasing the mouse button
+                    self._start_pos = None
+                    self._current_rect_item = None
+                else:
+                    super().mouseReleaseEvent(event)
             else:
                 super().mouseReleaseEvent(event)
+
         except Exception as e:
-            self.logger.error(f"Error in mouseReleaseEvent: {e}")
-            self.get_main_window().show_error_message(f"An error occurred: {e}")
+            # Log the exception and ensure the superclass method is called to maintain event handling
+            self.logger.error(f"Error in mouseReleaseEvent: {e}", exc_info=True)
+            super().mouseReleaseEvent(event)
 
     def get_cropped_areas(self):
         """ Returns the list of cropped areas """
@@ -498,6 +495,10 @@ class OCRApp(QMainWindow):
         self.project_folder = None  # Store the project folder path
         self.low_confidence_cells = []  # Store low-confidence OCR results
         self.table_detection_method = 'Peaks and Troughs'  # Default method
+        self.cropped_images = {}
+
+        self.pil_images = []
+        self.qimages = []
 
         # Signals for OCR processing
         self.ocr_worker = OcrGui()
@@ -506,25 +507,23 @@ class OCRApp(QMainWindow):
         self.ocr_worker.ocr_error.connect(self.show_error_message)
 
     def init_ui(self):
-
         splitter = QSplitter(Qt.Horizontal)
         self.graphics_view = PDFGraphicsView(self)
         splitter.addWidget(self.graphics_view)
 
-        self.project_list = QListWidget()
+        # Initialize project_list as QTreeWidget
+        self.project_list = QTreeWidget()
+        self.project_list.setHeaderLabel("Project Pages")
         splitter.addWidget(self.project_list)
-        self.project_list.currentRowChanged.connect(self.change_page)
+        self.project_list.currentItemChanged.connect(self.change_page)
 
-        splitter.setSizes([1900, 200])
+        splitter.setSizes([1900, 400])
 
         self.setCentralWidget(splitter)
 
         self.init_menu_bar()
-
         self.init_output_dock()
-
         self.init_tool_bar()
-
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
 
@@ -538,6 +537,9 @@ class OCRApp(QMainWindow):
         self.ocr_error.connect(self.on_ocr_error)
 
         self.graphics_view.lineModified.connect(self.on_line_modified)
+
+        # Connect the croppedImageCreated signal
+        self.graphics_view.croppedImageCreated.connect(self.update_project_list)
 
     def init_menu_bar(self):
         menu_bar = self.menuBar()
@@ -827,120 +829,100 @@ class OCRApp(QMainWindow):
             self.update_recent_files_menu()
 
     def detect_tables(self):
-        image = self.pdf_images[self.current_page_index]
-        image_path = os.path.join('temp_gui', f'page_{self.current_page_index}.png')
-
-        # Ensure the temp_gui directory exists
-        os.makedirs('temp_gui', exist_ok=True)
-
-        # Save the current page image to a file
+        """Detect tables in the currently selected page or cropped image."""
         try:
-            image.save(image_path)
+            current_item = self.project_list.currentItem()
+            if not current_item:
+                self.show_error_message("No item selected for table detection.")
+                return
+            
+            selected_text = current_item.text(0)  # Specify the column index
+            
+            # Determine if the selected item is a Page or Cropped image
+            if selected_text.startswith("Page"):
+                # Extract page index
+                page_index = int(selected_text.split(" ")[1]) - 1
+                image_path = self.image_file_paths[page_index]
+                self.perform_table_detection(image_path, page_index, cropped_index=None)
+            
+            elif selected_text.startswith("Cropped"):
+                # Extract parent page index and cropped index
+                parent_item = current_item.parent()
+                if not parent_item:
+                    self.show_error_message("Cropped item has no parent page.")
+                    return
+                
+                parent_text = parent_item.text(0)
+                page_index = int(parent_text.split(" ")[1]) - 1
+                
+                # Extract cropped index
+                cropped_text = selected_text.split(":")[0]  # e.g., "Cropped 1"
+                cropped_index = int(cropped_text.split(" ")[1]) - 1
+                image_path = self.cropped_images[page_index][cropped_index]
+                self.perform_table_detection(image_path, page_index, cropped_index)
+            
+            else:
+                self.show_error_message("Invalid selection for table detection.")
+                return
+        
         except Exception as e:
-            self.show_error_message(f'Failed to save image: {e}')
-            self.logger.error(f'Failed to save image: {e}')
-            return
+            self.logger.error(f"Error in detect_tables: {e}", exc_info=True)
+            self.show_error_message(f"An error occurred during table detection: {e}")
 
-        # Check if there are any cropped areas
-        cropped_areas = self.graphics_view.get_rectangles()
-
-        # Process cropped areas if they exist, otherwise process the full image
-        if cropped_areas:
-            # Perform table detection on cropped sections only
-            for cropped_area in cropped_areas:
-                cropped_image = self.crop_image_pil(self.pdf_images[self.current_page_index], cropped_area)
-                cropped_image_path = os.path.join('temp_gui', f'cropped_page_{self.current_page_index}.png')
-                cropped_image.save(cropped_image_path)
-
-                self.status_bar.showMessage('Performing table detection on cropped area...', 5000)
-                QApplication.processEvents()
-
-                try:
-                    if self.table_detection_method == 'Peaks and Troughs':
-                        horizontal_positions, vertical_positions, _ = ltd.find_table_peaks_troughs(
-                            cropped_image_path,
-                            horizontal_state="border",
-                            vertical_state="border"
-                        )
-                    elif self.table_detection_method == 'Transitions':
-                        horizontal_positions, vertical_positions, _ = ltd.find_table_transitions(
-                            cropped_image_path,
-                            threshold=15,
-                            min_distance=10,
-                            smoothing_window=5
-                        )
-                    else:
-                        self.show_error_message('Invalid table detection method selected.')
-                        return
-
-                    # Convert positions to QLineF objects for drawing lines
-                    lines = []
-                    width, height = cropped_image.size
-
-                    for y in horizontal_positions:
-                        line = QLineF(0, y, width, y)
-                        lines.append(line)
-                    for x in vertical_positions:
-                        line = QLineF(x, 0, x, height)
-                        lines.append(line)
-
-                    # Update the lines for the cropped area
-                    self.lines[self.current_page_index] = lines
-
-                    # Display updated lines on the cropped section in the preview
-                    self.graphics_view.display_lines(lines)
-
-                except Exception as e:
-                    self.show_error_message(f'Table detection on cropped area failed: {e}')
-                    self.logger.error(f'Table detection on cropped area failed: {e}')
-                    return
-        else:
-            self.status_bar.showMessage('No cropped areas found, proceeding with full image detection.', 5000)
-
-            # Perform table detection on the full image only if there are no cropped areas
-            try:
-                if self.table_detection_method == 'Peaks and Troughs':
-                    horizontal_positions, vertical_positions, _ = ltd.find_table_peaks_troughs(
-                        image_path,
-                        horizontal_state="border",
-                        vertical_state="border"
-                    )
-                elif self.table_detection_method == 'Transitions':
-                    horizontal_positions, vertical_positions, _ = ltd.find_table_transitions(
-                        image_path,
-                        threshold=15,
-                        min_distance=10,
-                        smoothing_window=5
-                    )
-                else:
-                    self.show_error_message('Invalid table detection method selected.')
-                    return
-            except Exception as e:
-                self.show_error_message(f'Table detection on full image failed: {e}')
-                self.logger.error(f'Table detection on full image failed: {e}')
+    def perform_table_detection(self, image_path, page_index, cropped_index=None):
+        """Helper method to perform table detection on a single image."""
+        try:
+            if self.table_detection_method == 'Peaks and Troughs':
+                horizontal_positions, vertical_positions, _ = ltd.find_table_peaks_troughs(
+                    image_path,
+                    horizontal_state="border",
+                    vertical_state="border"
+                )
+            elif self.table_detection_method == 'Transitions':
+                horizontal_positions, vertical_positions, _ = ltd.find_table_transitions(
+                    image_path,
+                    threshold=15,
+                    min_distance=10,
+                    smoothing_window=5
+                )
+            else:
+                self.show_error_message('Invalid table detection method selected.')
                 return
 
             # Convert positions to QLineF objects for drawing lines
             lines = []
+            if cropped_index is not None:
+                # If it's a cropped image, load the cropped image to get size
+                image = Image.open(image_path)
+            else:
+                image = self.pdf_images[page_index]
             width, height = image.size
 
             for y in horizontal_positions:
                 line = QLineF(0, y, width, y)
                 lines.append(line)
-
             for x in vertical_positions:
                 line = QLineF(x, 0, x, height)
                 lines.append(line)
 
-            # Store lines for the current page
-            self.lines[self.current_page_index] = lines
+            # Store lines
+            if cropped_index is not None:
+                key = f"{page_index}_{cropped_index}"
+            else:
+                key = f"{page_index}_full"
+            self.lines[key] = lines
 
-            # Display lines on the full image in the preview
+            # Display lines on the image in the preview
             self.graphics_view.display_lines(lines)
 
-            # Update status bar
-            self.status_bar.showMessage('Table detection completed.', 5000)
-        
+        except Exception as e:
+            if cropped_index is not None:
+                self.show_error_message(f'Table detection on cropped image failed: {e}')
+                self.logger.error(f'Table detection on cropped image {cropped_index + 1} of page {page_index + 1} failed: {e}', exc_info=True)
+            else:
+                self.show_error_message(f'Table detection on full image failed: {e}')
+                self.logger.error(f'Table detection on page {page_index + 1} failed: {e}', exc_info=True)
+
     def open_pdf(self):
         options = QFileDialog.Options()
         file_name, _ = QFileDialog.getOpenFileName(self, "Open File", "", "PDF Files (*.pdf);;Image Files (*.png);;All Files (*)", options=options)
@@ -949,29 +931,35 @@ class OCRApp(QMainWindow):
 
     def on_rectangle_selected(self, rect):
         """Handle the event when a rectangle is selected for cropping in the graphics view."""
-        self.logger.info(f"Cropping area selected on page {self.current_page_index + 1}: {rect}")
-        
-        # Clear any previously selected rectangle (limit to one rectangle)
-        self.graphics_view.clear_rectangles()
-        
-        # Save the current rectangle selection
-        self.rectangles[self.current_page_index] = [rect]
-
-        # Crop the selected area
         try:
-            cropped_image = self.crop_image_pil(self.pdf_images[self.current_page_index], rect)
-            cropped_image_path = os.path.join(self.project_folder, f"cropped_page_{self.current_page_index + 1}.png")
-            
-            cropped_image.save(cropped_image_path)
-            self.logger.info(f"Cropped image saved to {cropped_image_path}")
+            if self.current_page_index < 0 or self.current_page_index >= len(self.pil_images):
+                raise IndexError("Current page index is out of bounds.")
 
-            self.preview_cropped_image(cropped_image)
+            self.logger.info(f"Cropping area selected on page {self.current_page_index + 1}: {rect}")
 
-            self.status_bar.showMessage(f"Cropped image saved as {cropped_image_path}", 5000)
-        
+            # Crop the selected area using the PIL image
+            cropped_image = self.crop_image_pil(self.pil_images[self.current_page_index], rect)
+            if cropped_image is None:
+                raise ValueError("Cropping returned None.")
+
+            # Save the cropped image
+            cropped_image_path, page_index, cropped_index = self.save_cropped_image(cropped_image)
+
+            if cropped_image_path:
+                self.cropping_mode_action.setChecked(False)
+                self.logger.info("Cropping mode turned off after cropping action.")
+
+            return cropped_image_path, page_index, cropped_index
+
+        except IndexError as e:
+            self.logger.error(f"Index error in on_rectangle_selected: {e}")
+            self.show_error_message(f"An error occurred: {e}")
+            return None, None, None
+
         except Exception as e:
             self.logger.error(f"Error cropping image: {e}")
             self.show_error_message(f"Failed to crop image: {e}")
+            return None, None, None
 
     def preview_cropped_image(self, cropped_image):
         """Preview the cropped image in a separate window or UI element."""
@@ -996,29 +984,84 @@ class OCRApp(QMainWindow):
         self.lines[self.graphics_view.current_page_index] = lines
         self.logger.info(f"Lines saved for page {self.graphics_view.current_page_index + 1}")
 
-    def change_page(self, current_page):
+    def change_page(self, current_item, previous_item):
         """Handle page changes when a different page is selected from the project list."""
-        if current_page < 0 or current_page >= len(self.pdf_images):
-            return
+        try:
+            if not current_item:
+                return
 
-        # Update the current page index and display the new page
-        self.current_page_index = current_page
-        self.show_current_page()
+            selected_text = current_item.text(0)
+            self.logger.debug(f"Selected item: {selected_text}")
 
-        # Restore any previously saved rectangles and lines for the new page
-        self.graphics_view.clear_rectangles()
-        self.graphics_view.clear_lines()
-        page_rects = self.rectangles.get(self.current_page_index, [])
-        page_lines = self.lines.get(self.current_page_index, [])
+            if selected_text.startswith("Page"):
+                # Selected a full page
+                page_index = int(selected_text.split(" ")[1]) - 1
+                self.current_page_index = page_index
+                self.show_current_page()
 
-        for rect in page_rects:
-            rect_item = QGraphicsRectItem(rect)
-            pen = QPen(QColor(255, 0, 0), 2)
-            rect_item.setPen(pen)
-            self.graphics_view.scene().addItem(rect_item)
-            self.graphics_view._rect_items.append(rect_item)
+            elif selected_text.startswith("Cropped"):
+                # Selected a cropped image
+                parent_item = current_item.parent()
+                if not parent_item:
+                    self.logger.warning("Cropped item without a parent. Ignoring selection.")
+                    return
 
-        self.graphics_view.display_lines(page_lines)
+                parent_text = parent_item.text(0)
+                page_index = int(parent_text.split(" ")[1]) - 1
+
+                # Extract the cropped index from the text
+                cropped_text = selected_text.split(":")[0]  # e.g., "Cropped 1"
+                cropped_index = int(cropped_text.split(" ")[1]) - 1
+
+                self.show_cropped_image(page_index, cropped_index)
+
+        except Exception as e:
+            self.logger.error(f"Error changing page: {e}", exc_info=True)
+            self.show_error_message(f"An error occurred while changing page: {e}")
+
+    def show_cropped_image(self, page_index, cropped_index):
+        """Display the cropped image in the graphics view."""
+        try:
+            cropped_image_path = self.cropped_images[page_index][cropped_index]
+            
+            # Check if the file exists
+            if not os.path.exists(cropped_image_path):
+                self.logger.error(f"Cropped image file does not exist: {cropped_image_path}")
+                self.show_error_message(f"Cropped image file does not exist: {cropped_image_path}")
+                return
+
+            # Open the cropped image as a PIL Image
+            try:
+                cropped_image = Image.open(cropped_image_path)
+                cropped_image = cropped_image.convert('RGB')  # Ensure it's in RGB mode
+            except (IOError, SyntaxError) as e:
+                self.logger.error(f"Invalid image file: {cropped_image_path} - {e}")
+                self.show_error_message(f"Invalid image file: {cropped_image_path} - {e}")
+                return
+
+            # Convert to QImage
+            qimage = self.pil_image_to_qimage(cropped_image)
+            
+            # Add the cropped image to pil_images and qimages for potential future operations
+            self.pil_images.append(cropped_image)
+            self.qimages.append(qimage)
+            
+            # Update current page index to the cropped image
+            self.current_page_index = len(self.pil_images) - 1
+            
+            # Load the image into the graphics view
+            self.graphics_view.load_image(qimage)
+
+            # Log the successful loading of the cropped image
+            self.logger.info(f'Successfully displayed cropped image from page {page_index + 1}, cropped index {cropped_index + 1}')
+
+            # Clear existing rectangles and lines as this is a cropped image
+            self.graphics_view.clear_rectangles()
+            self.graphics_view.clear_lines()
+
+        except Exception as e:
+            self.logger.error(f"Failed to display cropped image {cropped_index + 1} from page {page_index + 1}: {e}", exc_info=True)
+            self.show_error_message(f"An error occurred while displaying cropped image: {e}")
 
     def save_as(self):
         # Implement Save As functionality here
@@ -1086,60 +1129,69 @@ class OCRApp(QMainWindow):
             self.logger.error(f"Error in process_files: {e}")
 
     def load_pdf(self, file_path):
-        """Load the PDF and convert each page to an image, saving them to disk."""
+        """Load a PDF and convert each page into PIL and QImage formats."""
         self.status_bar.showMessage('Loading PDF...')
         QApplication.processEvents()
 
         try:
-            # Create a temporary directory to store images
-            temp_dir = Path('temp_images')
-            if not temp_dir.exists():
-                temp_dir.mkdir()
-
-            # Convert PDF to images and save each page as a separate image file
-            self.logger.info(f'Attempting to load PDF: {file_path}')
-            self.pdf_images = convert_from_path(file_path, dpi=200)  # Lower DPI to manage memory usage
-            total_pages = len(self.pdf_images)
-            self.logger.info(f'Total pages in the PDF: {total_pages}')
-
-            if total_pages == 0:
+            # Convert PDF to list of PIL Images
+            pil_images = convert_from_path(file_path)
+            if not pil_images:
                 raise ValueError('No pages found in the PDF.')
-
+            
+            self.pil_images = pil_images  # Store PIL Images
+            
+            # Convert PIL Images to QImages
+            self.qimages = [self.pil_image_to_qimage(pil_img) for pil_img in pil_images]
+            
+            self.current_page_index = 0  # Start from the first page
+            # self.load_image(self.qimages[self.current_page_index])  # Removed
+            
             # Save each page as an image file
+            temp_dir = Path('temp_images')
+            temp_dir.mkdir(exist_ok=True)
             self.image_file_paths = []
-            for idx, image in enumerate(self.pdf_images):
+            for idx, pil_img in enumerate(self.pil_images):
                 image_file_path = temp_dir / f"page_{idx + 1}.png"
-                image.save(image_file_path, "PNG")
+                pil_img.save(image_file_path, "PNG")
                 self.image_file_paths.append(image_file_path)
-
-            self.current_page_index = 0
-            self.rectangles = {}  # Reset rectangles
-            self.lines = {}       # Reset lines
-
-            # Populate the project list with page names
-            self.project_list.clear()
-            pdf_name = os.path.basename(file_path)
-            self.project_list.addItem(f"{pdf_name}")
-            for idx in range(total_pages):
-                self.project_list.addItem(f"  - Page {idx + 1}")
-
+            
+            # Populate the project list with page names as top-level items
+            self.populate_project_list()
+            
             # Display the first page initially
             self.show_current_page()
             self.status_bar.showMessage('PDF Loaded Successfully', 5000)
 
             # Enable actions once a PDF is loaded
-            self.zoom_in_action.setEnabled(True)
-            self.zoom_out_action.setEnabled(True)
-            self.reset_zoom_action.setEnabled(True)
-            self.fit_to_screen_action.setEnabled(True)
-            self.detect_tables_action.setEnabled(True)
-            self.edit_mode_action.setEnabled(True)
-            self.cropping_mode_action.setEnabled(True)
+            self.enable_actions_after_loading()
 
         except Exception as e:
             self.logger.error(f'Failed to load PDF: {e}', exc_info=True)
             QMessageBox.critical(self, 'Error', f'Failed to load PDF: {e}')
             self.status_bar.showMessage('Failed to load PDF', 5000)
+
+    def populate_project_list(self):
+        """Populate the project list with pages as top-level items."""
+        self.project_list.clear()
+        self.project_list.setHeaderHidden(False)
+        self.project_list.setColumnCount(1)
+        self.project_list.headerItem().setText(0, "Project Pages")
+
+        for idx in range(len(self.pil_images)):
+            page_item = QTreeWidgetItem(self.project_list)
+            page_item.setText(0, f"Page {idx + 1}")
+            page_item.setFlags(page_item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+
+    def enable_actions_after_loading(self):
+        """Enable actions that should be available after loading a PDF."""
+        self.zoom_in_action.setEnabled(True)
+        self.zoom_out_action.setEnabled(True)
+        self.reset_zoom_action.setEnabled(True)
+        self.fit_to_screen_action.setEnabled(True)
+        self.detect_tables_action.setEnabled(True)
+        self.edit_mode_action.setEnabled(True)
+        self.cropping_mode_action.setEnabled(True)
 
     def update_page_label(self, page_index):
         """Update the page label or selection in the project list when the page changes."""
@@ -1147,28 +1199,6 @@ class OCRApp(QMainWindow):
             self.project_list.setCurrentRow(page_index + 1)
         except Exception as e:
             self.logger.error(f"Error updating page label: {e}")
-
-    def load_image(self, image_path):
-        try:
-            image = Image.open(image_path)
-            self.pdf_images = [image]
-            self.current_page_index = 0
-            self.rectangles = {}  # Reset rectangles
-            self.lines = {}       # Reset lines
-            self.show_current_page()
-            self.status_bar.showMessage('Image Loaded Successfully', 5000)
-            self.project_list.clear()
-            self.project_list.addItem(os.path.basename(image_path))
-
-            self.zoom_in_action.setEnabled(True)
-            self.zoom_out_action.setEnabled(True)
-            self.detect_tables_action.setEnabled(True)
-            self.edit_mode_action.setEnabled(True)
-            self.cropping_mode_action.setEnabled(True)
-        except Exception as e:
-            self.logger.error(f'Failed to load Image: {e}', exc_info=True)
-            self.status_bar.showMessage('Failed to load Image')
-            QMessageBox.critical(self, 'Error', f'Failed to load Image: {e}')
 
     def show_current_page(self):
         """Display the current page in the graphics view by loading it from disk."""
@@ -1180,9 +1210,9 @@ class OCRApp(QMainWindow):
 
             # Load the image for the current page from disk
             image_file_path = self.image_file_paths[self.current_page_index]
-            image = Image.open(image_file_path)
-            qimage = self.pil_image_to_qimage(image)  # Convert PIL Image to QImage
-            self.graphics_view.load_image(qimage)
+            pil_image = self.pil_images[self.current_page_index]
+            qimage = self.pil_image_to_qimage(pil_image)  # Convert PIL Image to QImage
+            self.graphics_view.load_image(qimage)  # Directly call PDFGraphicsView's load_image
 
             # Log the successful loading of the page
             self.logger.info(f'Successfully displayed page {self.current_page_index + 1}')
@@ -1203,11 +1233,42 @@ class OCRApp(QMainWindow):
 
         except Exception as e:
             self.logger.error(f"Failed to display page {self.current_page_index}: {e}", exc_info=True)
-            self.show_error_message(f"An error occurred while displaying page {self.current_page_index}: {e}")
+            self.show_error_message(f"An error occurred while displaying page {self.current_page_index + 1}: {e}")
 
     def save_current_rectangles(self):
         rects = self.graphics_view.get_rectangles()
         self.rectangles[self.current_page_index] = rects
+
+    def save_cropped_image(self, cropped_image):
+        """Save the cropped image to disk and update internal structures."""
+        try:
+            cropped_image_path = os.path.join(
+                self.project_folder,
+                f"cropped_page_{self.current_page_index + 1}_{len(self.cropped_images.get(self.current_page_index, [])) + 1}.png"
+            )
+
+            # Ensure the cropped image directory exists
+            os.makedirs(os.path.dirname(cropped_image_path), exist_ok=True)
+
+            # Save the cropped image
+            cropped_image.save(cropped_image_path)
+            self.logger.info(f"Cropped image saved to {cropped_image_path}")
+
+            # Add the cropped image to the cropped images dictionary under the current page
+            if self.current_page_index not in self.cropped_images:
+                self.cropped_images[self.current_page_index] = []
+            self.cropped_images[self.current_page_index].append(cropped_image_path)
+
+            # Determine the cropped index
+            cropped_index = len(self.cropped_images[self.current_page_index])
+
+            # Return the cropped image details
+            return cropped_image_path, self.current_page_index, cropped_index
+
+        except Exception as e:
+            self.logger.error(f"Error saving cropped image: {e}")
+            self.show_error_message(f"Failed to save cropped image: {e}")
+            return None, None, None
 
     def save_project(self):
         options = QFileDialog.Options()
@@ -1241,17 +1302,34 @@ class OCRApp(QMainWindow):
             QMessageBox.information(self, 'Load Successful', 'Project loaded successfully.')
 
     def pil_image_to_qimage(self, pil_image):
-        if pil_image.mode == 'RGB':
-            data = pil_image.tobytes('raw', 'RGB')
-            qimage = QImage(data, pil_image.width, pil_image.height, QImage.Format_RGB888)
-        elif pil_image.mode == 'RGBA':
-            data = pil_image.tobytes('raw', 'RGBA')
-            qimage = QImage(data, pil_image.width, pil_image.height, QImage.Format_RGBA8888)
-        else:
-            pil_image = pil_image.convert('RGB')
-            data = pil_image.tobytes('raw', 'RGB')
-            qimage = QImage(data, pil_image.width, pil_image.height, QImage.Format_RGB888)
-        return qimage
+        """Convert PIL Image to QImage."""
+        try:
+            if pil_image.mode == 'RGB':
+                r, g, b = pil_image.split()
+                image = Image.merge("RGB", (r, g, b))
+                data = image.tobytes("raw", "RGB")
+                qimage = QImage(data, image.width, image.height, QImage.Format_RGB888)
+            elif pil_image.mode == 'RGBA':
+                r, g, b, a = pil_image.split()
+                image = Image.merge("RGBA", (r, g, b, a))
+                data = image.tobytes("raw", "RGBA")
+                qimage = QImage(data, image.width, image.height, QImage.Format_RGBA8888)
+            elif pil_image.mode == 'L':
+                # Convert grayscale to RGB
+                image = pil_image.convert("RGB")
+                r, g, b = image.split()
+                data = image.tobytes("raw", "RGB")
+                qimage = QImage(data, image.width, image.height, QImage.Format_RGB888)
+            else:
+                # For other modes, convert to RGBA
+                image = pil_image.convert("RGBA")
+                data = image.tobytes("raw", "RGBA")
+                qimage = QImage(data, image.width, image.height, QImage.Format_RGBA8888)
+            return qimage
+        except Exception as e:
+            self.logger.error(f"Error converting PIL Image to QImage: {e}", exc_info=True)
+            self.show_error_message(f"Failed to convert image for display: {e}")
+            return QImage()
 
     def initialize_ocr_engines(self):
         self.status_bar.showMessage('Initializing OCR engines...')
@@ -1333,28 +1411,60 @@ class OCRApp(QMainWindow):
             self.ocr_progress.emit(1, 1)  # Ensure progress is complete
             self.run_ocr_action.setText('Run OCR')
     
-    def crop_image_pil(self, image, rect):
-        width, height = image.size
-        scene_width = self.graphics_view.scene().width()
-        scene_height = self.graphics_view.scene().height()
+    def crop_image_pil(self, pil_image, rect):
+        """
+        Crop the selected area from the PIL image based on the QRectF provided.
 
-        # Calculate the rectangle boundaries relative to the image size
-        left = int(max(0, min(int(rect.left() / scene_width * width), width)))
-        top = int(max(0, min(int(rect.top() / scene_height * height), height)))
-        right = int(max(left + 1, min(int(rect.right() / scene_width * width), width)))  # Ensure valid crop box
-        bottom = int(max(top + 1, min(int(rect.bottom() / scene_height * height), height)))  # Ensure valid crop box
+        Args:
+            pil_image (PIL.Image.Image): The original PIL image.
+            rect (QRectF): The cropping rectangle in scene coordinates.
 
-        # Ensure the crop box is valid (right > left and bottom > top)
-        if right > left and bottom > top:
-            try:
-                cropped_image = image.crop((left, top, right, bottom))
+        Returns:
+            PIL.Image.Image: The cropped image.
+        """
+        try:
+            pixmap_item = self.graphics_view._pixmap_item
+            if not pixmap_item:
+                self.logger.error("No pixmap item found in graphics view.")
+                raise ValueError("No image loaded in the graphics view.")
+
+            # Map the rect from scene coordinates to pixmap (item) coordinates
+            mapped_rect = pixmap_item.mapFromScene(rect).boundingRect()
+
+            # Get the pixmap's width and height
+            pixmap_width = pixmap_item.pixmap().width()
+            pixmap_height = pixmap_item.pixmap().height()
+
+            # Get the PIL image's width and height
+            image_width, image_height = pil_image.size
+
+            # Calculate scale factors between pixmap and image
+            scale_x = image_width / pixmap_width
+            scale_y = image_height / pixmap_height
+
+            # To maintain aspect ratio and prevent skewing, use the same scale factor
+            scale = min(scale_x, scale_y)
+
+            # Apply scale factor to the mapped rect to get pixel coordinates
+            left = int(max(0, mapped_rect.left() * scale))
+            top = int(max(0, mapped_rect.top() * scale))
+            right = int(min(mapped_rect.right() * scale, image_width))
+            bottom = int(min(mapped_rect.bottom() * scale, image_height))
+
+            # Log the calculated crop coordinates
+            self.logger.debug(f"Cropping rectangle (pixels): Left={left}, Top={top}, Right={right}, Bottom={bottom}")
+
+            # Ensure the crop box is valid (right > left and bottom > top)
+            if right > left and bottom > top:
+                cropped_image = pil_image.crop((left, top, right, bottom))
                 return cropped_image
-            except Exception as e:
-                self.logger.error(f"Error cropping image: {e}")
-                raise ValueError(f"Crop operation failed: {e}")
-        else:
-            self.logger.error(f"Invalid crop dimensions: {left}, {top}, {right}, {bottom}")
-            raise ValueError("Crop dimensions are out of bounds or invalid.")
+            else:
+                self.logger.error(f"Invalid crop dimensions: Left={left}, Top={top}, Right={right}, Bottom={bottom}")
+                raise ValueError("Crop dimensions are out of bounds or invalid.")
+
+        except Exception as e:
+            self.logger.error(f"Error cropping image: {e}", exc_info=True)
+            raise ValueError(f"Crop operation failed: {e}")
 
     def toggle_edit_mode(self):
         if self.edit_mode_action.isChecked():
@@ -1622,12 +1732,62 @@ class OCRApp(QMainWindow):
         else:
             self.show_error_message('No CSV file available to export.')
 
+    def update_project_list(self, page_index, cropped_index, cropped_image_path):
+        """Update the project list with the new cropped image."""
+        try:
+            self.logger.info(f"update_project_list called with page_index={page_index}, cropped_index={cropped_index}, image_path={cropped_image_path}")
+
+            if page_index is None or cropped_index is None or cropped_image_path is None:
+                self.logger.warning("Invalid data received for updating project list.")
+                return
+
+            parent_item = self.project_list.topLevelItem(page_index)
+            if parent_item:
+                cropped_item_text = f"Cropped {cropped_index}: {os.path.basename(cropped_image_path)}"
+                cropped_item = QTreeWidgetItem(parent_item)
+                cropped_item.setText(0, cropped_item_text)
+                cropped_item.setFlags(cropped_item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+                parent_item.addChild(cropped_item)
+                parent_item.setExpanded(True)  # Expand to show the new child
+                self.logger.info(f"Added cropped image to project list: {cropped_image_path}")
+
+                # Optionally, scroll to the new item
+                self.project_list.scrollToItem(cropped_item)
+            else:
+                self.logger.warning(f"Parent page item not found in project list for page index {page_index}")
+
+        except Exception as e:
+            self.logger.error(f"Error updating project list: {e}", exc_info=True)
+            self.show_error_message(f"Failed to update project list: {e}")
+
     def update_project_explorer(self):
-        self.project_list.clear()
-        if self.project_folder:
-            self.project_list.addItem(os.path.basename(self.project_folder))
-            for item in os.listdir(self.project_folder):
-                self.project_list.addItem(f"  - {item}")
+        """Refresh the project explorer to reflect current project folder contents."""
+        try:
+            self.project_list.clear()
+            if self.project_folder:
+                # Add the project folder as a top-level item
+                project_item = QTreeWidgetItem(self.project_list)
+                project_item.setText(0, os.path.basename(self.project_folder))
+                project_item.setFlags(project_item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+
+                # Add pages and their cropped images
+                for page_index, image_path in enumerate(self.image_file_paths):
+                    page_item = QTreeWidgetItem(project_item)
+                    page_item.setText(0, f"Page {page_index + 1}")
+                    page_item.setFlags(page_item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+
+                    # Add cropped images under the page
+                    if page_index in self.cropped_images:
+                        for cropped_index, cropped_image_path in enumerate(self.cropped_images[page_index]):
+                            cropped_item = QTreeWidgetItem(page_item)
+                            cropped_item.setText(0, f"Cropped {cropped_index + 1}: {os.path.basename(cropped_image_path)}")
+                            cropped_item.setFlags(cropped_item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+
+                project_item.setExpanded(True)  # Expand the project folder to show pages and cropped images
+
+        except Exception as e:
+            self.logger.error(f"Error updating project explorer: {e}", exc_info=True)
+            self.show_error_message(f"Failed to update project explorer: {e}")
 
     def cleanup_temp_images(self):
         """Delete all temporary directories and their contents."""
@@ -1644,7 +1804,6 @@ class OCRApp(QMainWindow):
     def closeEvent(self, event):
         self.cleanup_temp_images()
         event.accept()
-
 
 def main():
     # Configure logging at the very start
