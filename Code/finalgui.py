@@ -14,8 +14,6 @@ import shutil
 import csv
 import traceback
 from email.message import EmailMessage
-from PyPDF2 import PdfFileReader
-import PyPDF2
 
 # Third-party imports
 import cv2
@@ -41,6 +39,7 @@ import ocr_pipe as rtr
 import luminosity_table_detection as ltd
 
 
+# Function to configure logging
 def configure_logging():
     """Configures the logging settings."""
     logger = logging.getLogger()
@@ -52,7 +51,7 @@ def configure_logging():
     )
 
     # File handler to write logs to a file
-    file_handler = RotatingFileHandler('OCR_app.log', maxBytes=5*1024*1024, backupCount=1, encoding='utf-8')    
+    file_handler = RotatingFileHandler('OCR_app.log', maxBytes=5*1024*1024, backupCount=1, encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
@@ -63,6 +62,7 @@ def configure_logging():
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
+# Class for emitting output to the GUI log
 class EmittingStream(QObject):
     textWritten = pyqtSignal(str)
 
@@ -73,6 +73,7 @@ class EmittingStream(QObject):
 
     def flush(self):
         pass
+
 
 class LineItem(QGraphicsLineItem):
     def __init__(self, line, parent=None):
@@ -365,6 +366,20 @@ class PDFGraphicsView(QGraphicsView):
         except Exception as e:
             self.get_main_window().show_error_message(f"An error occurred while dropping files: {e}")
             self.logger.error(f"Error in dropEvent: {e}")
+    
+        def resizeEvent(self, event):
+            """
+            Handles the resize event of the QGraphicsView (canvas).
+            Automatically called when the window or view is resized.
+            """
+            # Call the base class implementation to ensure default behavior
+            super().resizeEvent(event)
+
+            # Custom logic for handling canvas resizing
+            self.on_canvas_resize()
+
+            # Optionally, you can log or do further actions if needed
+            self.logger.info("Canvas resized.")
 
 class Action:
     """Base class for actions that can be undone/redone."""
@@ -471,11 +486,59 @@ class OCRWorker(QThread):
         self.ocr_cancel_event.set()
         self.logger.info("OCR cancellation requested.")
 
+def resizeEvent(self, event):
+    """
+    Handles the resize event of the QGraphicsView (canvas).
+    Automatically called when the window or view is resized.
+    """
+    # Call the base class implementation to ensure default behavior
+    super().resizeEvent(event)
+
+    # Custom logic for handling canvas resizing
+    self.on_canvas_resize()
+
+    # Optionally, you can log or do further actions if needed
+    self.logger.info("Canvas resized.")
+
 class OCRApp(QMainWindow):
     ocr_completed = pyqtSignal(object)
     ocr_progress = pyqtSignal(int, int)
     ocr_error = pyqtSignal(str)
     logger = logging.getLogger(__name__)
+
+    def fit_to_screen(self):
+        """Fit the current image to the screen."""
+        self.graphics_view.fitInView(self.graphics_view.sceneRect(), Qt.KeepAspectRatio)
+        self.status_bar.showMessage('Image fitted to screen', 5000)
+
+    def zoom_in(self):
+        """Zoom in on the current image."""
+        self.graphics_view.scale(1.2, 1.2)
+
+    def zoom_out(self):
+        """Zoom out on the current image."""
+        self.graphics_view.scale(1 / 1.2, 1 / 1.2)
+
+    def reset_zoom(self):
+        """Reset the zoom level to 100%."""
+        self.graphics_view.resetTransform()
+        self.status_bar.showMessage('Zoom reset to 100%', 5000)
+
+    def toggle_cropping_mode(self):
+        """Toggle the cropping mode on or off."""
+        if self.cropping_mode_action.isChecked():
+            self.graphics_view.enable_cropping_mode(True)
+        else:
+            self.graphics_view.enable_cropping_mode(False)
+
+    def toggle_edit_mode(self):
+        """Toggle the edit mode for the graphics view."""
+        if self.edit_mode_action.isChecked():
+            self.graphics_view.setDragMode(QGraphicsView.ScrollHandDrag)
+            self.status_bar.showMessage("Editing mode enabled")
+        else:
+            self.graphics_view.setDragMode(QGraphicsView.NoDrag)
+            self.status_bar.showMessage("Editing mode disabled")
 
     def __init__(self):
         super().__init__()
@@ -562,10 +625,10 @@ class OCRApp(QMainWindow):
         load_project_action.triggered.connect(self.load_project)
         file_menu.addAction(load_project_action)
 
-        save_as_action = QAction('Save As', self)
-        save_as_action.setShortcut('Ctrl+S')
-        save_as_action.triggered.connect(self.save_as)
-        file_menu.addAction(save_as_action)
+        save_csv_action = QAction('Save As', self)
+        save_csv_action.setShortcut('Ctrl+S')
+        save_csv_action.triggered.connect(self.save_csv)
+        file_menu.addAction(save_csv_action)
 
         exit_action = QAction('Exit', self)
         exit_action.triggered.connect(self.close)
@@ -717,7 +780,7 @@ class OCRApp(QMainWindow):
 
         # Export to Excel
         self.export_excel_action = QAction('Export to Excel', self)
-        self.export_excel_action.triggered.connect(self.export_to_excel)
+        #self.export_excel_action.triggered.connect(self.export_to_excel)
         self.export_excel_action.setEnabled(False)  # Initially disabled
         tool_bar.addAction(self.export_excel_action)
         
@@ -1064,7 +1127,7 @@ class OCRApp(QMainWindow):
             self.logger.error(f"Failed to display cropped image {cropped_index + 1} from page {page_index + 1}: {e}", exc_info=True)
             self.show_error_message(f"An error occurred while displaying cropped image: {e}")
 
-    def save_as(self):
+    def save_csv(self):
         # Implement Save As functionality here
         if not self.last_csv_path or not os.path.exists(self.last_csv_path):
             self.show_error_message('No CSV file available to save. Please run OCR first.')
@@ -1390,81 +1453,112 @@ class OCRApp(QMainWindow):
             self.ocr_worker.ocr_completed.connect(self.on_ocr_completed)
             self.ocr_worker.ocr_error.connect(self.on_ocr_error)
             self.ocr_worker.start()
-
-def on_ocr_error(self, error_message):
-    """
-    Handles errors that occur during the OCR process.
-    """
-    # Update status bar to reflect OCR failure
-    self.status_bar.showMessage('OCR Failed', 5000)
-
-    # Show an error message dialog
-    self.show_error_message(f'OCR Failed: {error_message}')
-
-    # Add this line to launch manual table detection after OCR failure
-    self.launch_manual_table_detection()
-
-    # Remove the progress bar from the status bar
-    if self.progress_bar:
-        self.status_bar.removeWidget(self.progress_bar)
-        self.progress_bar = None
-
-    # Reset the OCR running state and button text
-    self.ocr_running = False
-    self.run_ocr_action.setText('Run OCR')
-
-
-def on_ocr_completed(self, result):
-    """
-    Handles the completion of the OCR task.
-    If no results are found, launch manual table detection.
-    """
-    all_table_data, total, bad, easyocr_count, paddleocr_count = result
-
-    # Check if OCR failed to detect tables and trigger manual table detection
-    if total == 0 or bad > 0:
-        self.status_bar.showMessage('OCR did not detect tables or results were unreliable. Launching manual table detection.', 5000)
-        self.launch_manual_table_detection()
-    else:
-        self.status_bar.showMessage('OCR Completed Successfully', 5000)
-        # Proceed with the normal flow, e.g., save the results to CSV, etc.
     
-    # Reset OCR running state
-    self.ocr_running = False
-    self.run_ocr_action.setText('Run OCR')
+    def export_to_excel(self):
+        if self.last_csv_path and os.path.exists(self.last_csv_path):
+            excel_file_path, _ = QFileDialog.getSaveFileName(
+                self, "Save Excel File", self.last_csv_path.replace('.csv', '.xlsx'),
+                "Excel Files (*.xlsx);;All Files (*)")
+            if excel_file_path:
+                try:
+                    df = pd.read_csv(self.last_csv_path)
+                    df.to_excel(excel_file_path, index=False)
+                    QMessageBox.information(self, 'Export Successful', 'CSV exported to Excel successfully.')
+                except Exception as e:
+                    self.show_error_message(f'Failed to export CSV to Excel: {e}')
+        else:
+            self.show_error_message('No CSV file available to export.')
 
-    def launch_manual_table_detection(self):
-        """Launch manual table detection using PyQt5 instead of Tkinter."""
+
+    def on_ocr_error(self, error_message):
+        """
+        Handles errors that occur during the OCR process.
+        """
+        # Update status bar to reflect OCR failure
+        self.status_bar.showMessage('OCR Failed', 5000)
+
+        # Show an error message dialog
+        self.show_error_message(f'OCR Failed: {error_message}')
+
+        # Add this line to launch manual table detection after OCR failure
+        self.launch_manual_table_detection()
+
+        # Remove the progress bar from the status bar
+        if self.progress_bar:
+            self.status_bar.removeWidget(self.progress_bar)
+            self.progress_bar = None
+
+        # Reset the OCR running state and button text
+        self.ocr_running = False
+        self.run_ocr_action.setText('Run OCR')
+
+
+    def on_ocr_completed(self, result):
+        """
+        Handles the completion of the OCR task.
+        If no results are found, launch manual table detection.
+        """
+        all_table_data, total, bad, easyocr_count, paddleocr_count = result
+
+        # Check if OCR failed to detect tables and trigger manual table detection
+        if total == 0 or bad > 0:
+            self.status_bar.showMessage('OCR did not detect tables or results were unreliable. Launching manual table detection.', 5000)
+            self.launch_manual_table_detection()
+        else:
+            self.status_bar.showMessage('OCR Completed Successfully', 5000)
+            # Proceed with the normal flow, e.g., save the results to CSV, etc.
+        
+        # Reset OCR running state
+        self.ocr_running = False
+        self.run_ocr_action.setText('Run OCR')
+
+        # Save the OCR results to a CSV file
         try:
-            self.hide()  # Hide the main PyQt window
+            if self.current_pdf_path:
+                default_csv_name = os.path.splitext(os.path.basename(self.current_pdf_path))[0] + '.csv'
+                default_csv_path = os.path.join(self.project_folder, default_csv_name)
+            else:
+                default_csv_path = os.path.join(self.project_folder, 'ocr_results.csv')
 
-            # Create a new QMainWindow for manual table detection
-            manual_table_window = QMainWindow()
-            manual_table_window.setWindowTitle("Manual Table Detection")
-            manual_table_window.resize(800, 600)
+            rtr.write_to_csv(all_table_data, default_csv_path)
 
-            # Create the central widget for the window
-            central_widget = QWidget()
-            manual_table_window.setCentralWidget(central_widget)
+            with open(default_csv_path, 'r', encoding='utf-8') as f:
+                csv_content = f.read()
+                self.csv_output.setPlainText(csv_content)
 
-            # Set up layout for the central widget
-            layout = QVBoxLayout(central_widget)
-
-            # Convert PDF pages to images and display them in a QGraphicsView
-            pdf_images = self.convert_pdf_to_images(self.current_pdf_path)  # Convert PDF to images
-            self.manual_table_app = TableDividerApp(pdf_images, layout)  # Initialize the table divider app
-
-            # Show the manual table detection window
-            manual_table_window.show()
-
-            # Re-show the main window after manual table detection is complete
-            manual_table_window.finished.connect(lambda: self.show())
+            self.status_bar.showMessage(f"OCR Completed. Results saved to {default_csv_path}", 5000)
+            self.last_csv_path = default_csv_path  # Store the path of the last saved CSV for later use
+            self.export_excel_action.setEnabled(True)
 
         except Exception as e:
-            self.logger.error(f"Error launching manual table detection: {e}")
-            self.show_error_message(f"Failed to launch manual table detection: {e}")
+            self.show_error_message(f"Failed to write CSV: {e}")
+            self.logger.error(f"Failed to write CSV: {e}")
 
+        # Display the OCR results in the table view
+        self.display_table(all_table_data)
 
+        # Cleanup temporary files used during OCR
+        rtr.cleanup('temp_gui')
+
+        # Remove the progress bar from the status bar
+        if self.progress_bar:
+            self.status_bar.removeWidget(self.progress_bar)
+            self.progress_bar = None
+
+        # Performance statistics
+        num_pages = len(self.pdf_images)
+        avg_time = processing_time / num_pages if num_pages else 0
+        self.status_bar.showMessage(f'OCR Completed. Average time per page: {avg_time:.2f} seconds', 5000)
+
+        # Quality statistics
+        if total > 0:
+            percentage_low_confidence = (bad / total) * 100
+            self.status_bar.showMessage(f"Low-confidence results (<80%): {percentage_low_confidence:.2f}% ({bad} items)", 5000)
+        else:
+            self.status_bar.showMessage("No OCR results to process.", 5000)
+
+        # OCR engine usage summary
+        self.status_bar.showMessage(f'OCR Engine Usage - EasyOCR: {easyocr_count}, PaddleOCR: {paddleocr_count}', 5000)
 
     def ocr_task(self):
         """Runs the OCR task when triggered by the GUI."""
@@ -1642,82 +1736,6 @@ def on_ocr_completed(self, result):
         self.logger.error(f"Error displayed: {message}")
         if detailed_message:
             self.logger.error(f"Details: {detailed_message}")
-
-    def on_ocr_completed(self, result):
-        """
-        Handles the completion of the OCR task in the GUI, including saving the results to a CSV,
-        updating the GUI with performance statistics, and showing OCR quality information.
-        """
-        # Unpack the result
-        all_table_data, total, bad, easyocr_count, paddleocr_count, processing_time = result
-
-        # Determine where to save the CSV
-        if self.current_pdf_path:
-            default_csv_name = os.path.splitext(os.path.basename(self.current_pdf_path))[0] + '.csv'
-            default_csv_path = os.path.join(self.project_folder, default_csv_name)
-        else:
-            default_csv_path = os.path.join(self.project_folder, 'ocr_results.csv')
-
-        csv_file_path = default_csv_path  # Save CSV directly into the project folder
-
-        # Write the table data to CSV
-        try:
-            rtr.write_to_csv(all_table_data, csv_file_path)
-        except Exception as e:
-            self.show_error_message(f"Failed to write CSV file: {e}")
-            self.logger.error(f"Failed to write CSV file: {e}")
-            return
-
-        # Read the CSV content and display it in the GUI's CSV output panel
-        try:
-            with open(csv_file_path, 'r', encoding='utf-8') as f:
-                csv_content = f.read()
-                self.csv_output.setPlainText(csv_content)
-        except Exception as e:
-            self.show_error_message(f"Failed to read CSV file: {e}")
-            self.logger.error(f"Failed to read CSV file: {e}")
-
-        self.status_bar.showMessage(f"OCR Completed. Results saved to {csv_file_path}", 5000)
-        self.last_csv_path = csv_file_path  # Store the path of the last saved CSV for later use
-        self.export_excel_action.setEnabled(True)  # Enable the "Export to Excel" action
-
-        # Display the OCR results in the table view
-        self.display_table(all_table_data)
-
-        # Cleanup temporary files used during OCR
-        rtr.cleanup('temp_gui')
-
-        # Remove the progress bar from the status bar
-        if self.progress_bar:
-            self.status_bar.removeWidget(self.progress_bar)
-            self.progress_bar = None
-
-        # Performance statistics
-        num_pages = len(self.pdf_images)
-        avg_time = processing_time / num_pages if num_pages else 0
-        self.status_bar.showMessage(f'OCR Completed. Average time per page: {avg_time:.2f} seconds', 5000)
-
-        # Quality statistics (for low-confidence results)
-        if total > 0:
-            percentage_low_confidence = (bad / total) * 100
-            self.status_bar.showMessage(f"Low-confidence results (<80%): {percentage_low_confidence:.2f}% ({bad} items)", 5000)
-        else:
-            self.status_bar.showMessage("No OCR results to process.", 5000)
-
-        # Log the OCR engine usage summary
-        self.status_bar.showMessage(f'OCR Engine Usage - EasyOCR: {easyocr_count}, PaddleOCR: {paddleocr_count}', 5000)
-
-        # Update the project explorer to show the new files
-        self.update_project_explorer()
-
-        # Optional: Display detected language (assuming this functionality is in place)
-        detected_language = 'English'  # Placeholder - Replace with actual detected language if available
-        self.status_bar.showMessage(f'Detected Language: {detected_language}', 5000)
-
-        # Reset the OCR running state and button text
-        self.ocr_running = False
-        self.run_ocr_action.setText('Run OCR')
-        self.save_csv_action.setEnabled(True)
 
     def on_ocr_progress(self, tasks_completed, total_tasks):
         self.progress_bar.setValue(tasks_completed)
@@ -1985,8 +2003,6 @@ class TableDividerApp:
         self.graphics_scene.addPixmap(pixmap)
         self.graphics_view.fitInView(self.graphics_scene.itemsBoundingRect(), Qt.KeepAspectRatio)
 
-
-
     def resize_image_to_fit_canvas(self, image):
         canvas_width = self.graphics_view.viewport().width()
         canvas_height = self.graphics_view.viewport().height()
@@ -2054,8 +2070,6 @@ class TableDividerApp:
         data = image.tobytes("raw", "RGB")
         qimage = QImage(data, pil_image.width, pil_image.height, QImage.Format_RGB888)
         return qimage
-
-
 
 if __name__ == '__main__':
     main()
