@@ -15,6 +15,8 @@ import paddle
 from pdf2image import convert_from_path
 import luminosity_table_detection as ltd
 from luminosity_table_detection import split_image_with_lines
+import tkinter as tk
+from PIL import ImageTk
 
 def get_absolute_path_with_prefix(path):
     """Return the absolute path with the '\\?\' prefix if running on Windows to handle long paths."""
@@ -387,3 +389,44 @@ def run_ocr_pipeline(pdf_file, storedir, output_csv, ocr_progress, ocr_cancel_ev
         # Optionally, emit final progress if not already at 100%
         if not ocr_cancel_event.is_set():
             ocr_progress.emit(100, 100)
+
+def start_manual_table_detection(images):
+    """Launch manual table detection if OCR fails."""
+    root = tk.Tk()
+    manual_table_app = TableDividerApp(root, images)  # Pass the images to the manual tool
+    root.mainloop()
+
+def run_ocr_pipeline(pdf_file, storedir, output_csv, ocr_progress, ocr_cancel_event):
+    try:
+        setup_environment(storedir)
+        configure_logging()
+        ocr = initialize_paddleocr()
+        reader = initialize_easyocr()
+
+        image_list = convert_pdf_to_images(pdf_file, storedir)
+        total_pages = len(image_list)
+        all_table_data = {}
+
+        for idx, image_path in enumerate(image_list):
+            if ocr_cancel_event.is_set():
+                raise Exception("OCR process was cancelled during processing images.")
+
+            table_map = extract_tables_from_images([image_path])
+            if not table_map[idx]:
+                print(f"OCR failed on {image_path}. Triggering manual table detection.")
+                # Call manual table detection here when OCR fails or tables aren't detected
+                pil_images = [Image.open(image_path) for image_path in image_list]
+                start_manual_table_detection(pil_images)
+                break  # Break or exit if you want to skip further OCR processing
+            
+            location_lists = cellularize_tables([image_path], table_map, idx)
+            table_data, total, bad, easyocr_count, paddleocr_count = perform_ocr_on_images(location_lists, ocr, reader)
+            all_table_data[idx] = table_data
+
+        write_to_csv(all_table_data, output_csv)
+
+    except Exception as e:
+        logging.error(f"An error occurred during OCR pipeline: {e}", exc_info=True)
+        raise
+    finally:
+        cleanup(storedir)
