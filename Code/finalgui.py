@@ -17,12 +17,6 @@ from email.message import EmailMessage
 from PyPDF2 import PdfFileReader
 import PyPDF2
 
-#Required Tkinter Modules
-import tkinter as tk
-from tkinter import filedialog
-from PIL import Image, ImageTk
-
-
 # Third-party imports
 import cv2
 import numpy as np
@@ -39,7 +33,6 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QPixmap, QImage, QPen, QColor, QPainter, QFont, QDragEnterEvent, QDropEvent
 from PyQt5.QtCore import Qt, QRectF, QObject, pyqtSignal, QLineF, QThread
 from pdf2image import convert_from_path
-from PIL import Image
 from logging.handlers import RotatingFileHandler
 
 # Local imports
@@ -766,6 +759,7 @@ class OCRApp(QMainWindow):
             # Create a QWidget to hold the QTextBrowser
             help_widget = QWidget()
             layout = QVBoxLayout()
+            button_layout = QHBoxLayout()
             help_widget.setLayout(layout)
 
             # Create a QTextBrowser to display the text content
@@ -1359,43 +1353,43 @@ class OCRApp(QMainWindow):
             self.ocr_initialized = False
 
     def run_ocr(self):
-    if not self.ocr_initialized:
-        self.show_error_message('Please initialize the OCR engines before running OCR.')
-        return
+        if not self.ocr_initialized:
+            self.show_error_message('Please initialize the OCR engines before running OCR.')
+            return
 
-    if self.ocr_running:
-        # Cancel OCR
-        self.ocr_cancel_event.set()
-        self.status_bar.showMessage('Cancelling OCR...', 5000)
-        self.run_ocr_action.setText('Run OCR')
-        self.ocr_running = False
-    else:
-        # Start OCR
-        self.status_bar.showMessage('Running OCR...', 5000)
-        QApplication.processEvents()
-        self.save_current_rectangles()
-        self.save_current_lines()
-        self.progress_bar = QProgressBar()
-        self.status_bar.addPermanentWidget(self.progress_bar)
-        total_tasks = len(self.pdf_images)  # Calculate total tasks
-        self.progress_bar.setMaximum(total_tasks)
-        self.progress_bar.setValue(0)
-        self.ocr_cancel_event = threading.Event()
-        self.run_ocr_action.setText('Cancel OCR')
-        self.ocr_running = True
+        if self.ocr_running:
+            # Cancel OCR
+            self.ocr_cancel_event.set()
+            self.status_bar.showMessage('Cancelling OCR...', 5000)
+            self.run_ocr_action.setText('Run OCR')
+            self.ocr_running = False
+        else:
+            # Start OCR
+            self.status_bar.showMessage('Running OCR...', 5000)
+            QApplication.processEvents()
+            self.save_current_rectangles()
+            self.save_current_lines()
+            self.progress_bar = QProgressBar()
+            self.status_bar.addPermanentWidget(self.progress_bar)
+            total_tasks = len(self.pdf_images)  # Calculate total tasks
+            self.progress_bar.setMaximum(total_tasks)
+            self.progress_bar.setValue(0)
+            self.ocr_cancel_event = threading.Event()
+            self.run_ocr_action.setText('Cancel OCR')
+            self.ocr_running = True
 
-        # Prepare paths
-        storedir = os.path.abspath("temp_gui")
-        os.makedirs(storedir, exist_ok=True)
-        pdf_file = self.current_pdf_path
-        output_csv = os.path.join(self.project_folder, "ocr_results.csv")
+            # Prepare paths
+            storedir = os.path.abspath("temp_gui")
+            os.makedirs(storedir, exist_ok=True)
+            pdf_file = self.current_pdf_path
+            output_csv = os.path.join(self.project_folder, "ocr_results.csv")
 
-        # Start the OCRWorker thread
-        self.ocr_worker = OCRWorker(pdf_file, storedir, output_csv, self.ocr_cancel_event)
-        self.ocr_worker.ocr_progress.connect(self.on_ocr_progress)
-        self.ocr_worker.ocr_completed.connect(self.on_ocr_completed)
-        self.ocr_worker.ocr_error.connect(self.on_ocr_error)
-        self.ocr_worker.start()
+            # Start the OCRWorker thread
+            self.ocr_worker = OCRWorker(pdf_file, storedir, output_csv, self.ocr_cancel_event)
+            self.ocr_worker.ocr_progress.connect(self.on_ocr_progress)
+            self.ocr_worker.ocr_completed.connect(self.on_ocr_completed)
+            self.ocr_worker.ocr_error.connect(self.on_ocr_error)
+            self.ocr_worker.start()
 
 def on_ocr_error(self, error_message):
     """
@@ -1439,14 +1433,38 @@ def on_ocr_completed(self, result):
     self.ocr_running = False
     self.run_ocr_action.setText('Run OCR')
 
-def launch_manual_table_detection(self):
-    """Launch the manual table detection tool."""
-    self.hide()  # Hide the main PyQt window
-    root = tk.Tk()  # Start Tkinter root
-    pdf_images = self.convert_pdf_to_images(self.current_pdf_path)  # Convert PDF to images
-    self.manual_table_app = TableDividerApp(root, pdf_images)  # Initialize TableDividerApp with images
-    root.mainloop()  # Start the Tkinter event loop
-    self.show()  # Show the PyQt window after manual table detection is done
+    def launch_manual_table_detection(self):
+        """Launch manual table detection using PyQt5 instead of Tkinter."""
+        try:
+            self.hide()  # Hide the main PyQt window
+
+            # Create a new QMainWindow for manual table detection
+            manual_table_window = QMainWindow()
+            manual_table_window.setWindowTitle("Manual Table Detection")
+            manual_table_window.resize(800, 600)
+
+            # Create the central widget for the window
+            central_widget = QWidget()
+            manual_table_window.setCentralWidget(central_widget)
+
+            # Set up layout for the central widget
+            layout = QVBoxLayout(central_widget)
+
+            # Convert PDF pages to images and display them in a QGraphicsView
+            pdf_images = self.convert_pdf_to_images(self.current_pdf_path)  # Convert PDF to images
+            self.manual_table_app = TableDividerApp(pdf_images, layout)  # Initialize the table divider app
+
+            # Show the manual table detection window
+            manual_table_window.show()
+
+            # Re-show the main window after manual table detection is complete
+            manual_table_window.finished.connect(lambda: self.show())
+
+        except Exception as e:
+            self.logger.error(f"Error launching manual table detection: {e}")
+            self.show_error_message(f"Failed to launch manual table detection: {e}")
+
+
 
     def ocr_task(self):
         """Runs the OCR task when triggered by the GUI."""
@@ -1557,7 +1575,7 @@ def launch_manual_table_detection(self):
 
     def fit_to_screen(self):
         """Fit the current image to the screen."""
-        self.graphics_view.fitInView(self.graphics_view._pixmap_item, Qt.KeepAspectRatio)
+        self.graphics_view.fitInView(self.graphics_scene.itemsBoundingRect(), Qt.KeepAspectRatio)
         self.status_bar.showMessage('Image fitted to screen', 5000)
 
     def normal_output_written(self, text):
@@ -1940,32 +1958,38 @@ class TableDividerApp:
         self.setup_ui()
 
     def setup_ui(self):
-        self.canvas = tk.Canvas(self.root, width=800, height=600)
-        self.canvas.pack()
 
-        self.prev_button = tk.Button(self.root, text="Previous Page", command=self.show_prev_image)
-        self.prev_button.pack(side=tk.LEFT)
+        self.graphics_view = QGraphicsView()
+        self.graphics_scene = QGraphicsScene()
+        self.graphics_view.setScene(self.graphics_scene)
+        layout.addWidget(self.graphics_view)  # Add to your main layout
 
-        self.next_button = tk.Button(self.root, text="Next Page", command=self.show_next_image)
-        self.next_button.pack(side=tk.RIGHT)
+        self.prev_button = QPushButton("Previous Page")
+        self.next_button = QPushButton("Next Page")
+        self.save_button = QPushButton("Save Tables")
 
-        self.save_button = tk.Button(self.root, text="Save Tables", command=self.save_tables)
-        self.save_button.pack()
-
-        self.canvas.bind("<Button-1>", self.draw_horizontal_line)
-        self.canvas.bind("<Button-3>", self.draw_vertical_line)
+    def mousePressEvent(self, event):
+        # Handle left and right mouse clicks here
+        if event.button() == Qt.LeftButton:
+            self.draw_horizontal_line(event)
+        elif event.button() == Qt.RightButton:
+            self.draw_vertical_line(event)
+        super().mousePressEvent(event)
 
         self.show_image(self.pdf_images[self.current_image])
 
     def show_image(self, image):
-        self.canvas.delete("all")
-        resized_image = self.resize_image_to_fit_canvas(image)
-        self.tk_image = ImageTk.PhotoImage(resized_image)
-        self.canvas.create_image(0, 0, anchor=tk.NW, image=self.tk_image)
+        qimage = self.pil_image_to_qimage(image)
+        pixmap = QPixmap.fromImage(qimage)
+        self.graphics_scene.clear()
+        self.graphics_scene.addPixmap(pixmap)
+        self.graphics_view.fitInView(self.graphics_scene.itemsBoundingRect(), Qt.KeepAspectRatio)
+
+
 
     def resize_image_to_fit_canvas(self, image):
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
+        canvas_width = self.graphics_view.viewport().width()
+        canvas_height = self.graphics_view.viewport().height()
         image_ratio = image.width / image.height
         canvas_ratio = canvas_width / canvas_height
 
@@ -1989,16 +2013,21 @@ class TableDividerApp:
             self.show_image(self.pdf_images[self.current_image])
 
     def draw_horizontal_line(self, event):
-        y = event.y
-        self.horizontal_lines.append(y)
-        self.canvas.create_line(0, y, self.canvas.winfo_width(), y, fill="red")
-        self.update_rectangles()
+        # Convert mouse position to scene position and draw a horizontal line
+        y = event.pos().y()
+        line = QGraphicsLineItem(0, y, self.graphics_view.width(), y)
+        pen = QPen(QColor(255, 0, 0), 2)
+        line.setPen(pen)
+        self.graphics_scene.addItem(line)
+
 
     def draw_vertical_line(self, event):
-        x = event.x
-        self.vertical_lines.append(x)
-        self.canvas.create_line(x, 0, x, self.canvas.winfo_height(), fill="blue")
-        self.update_rectangles()
+        x = event.pos().x()
+        line = QGraphicsLineItem(x, 0, x, self.graphics_view.height())
+        pen = QPen(QColor(0, 0, 255), 2)
+        line.setPen(pen)
+        self.graphics_scene.addItem(line)
+
 
     def update_rectangles(self):
         self.rectangles.clear()
@@ -2019,6 +2048,13 @@ class TableDividerApp:
             cropped_image = self.pdf_images[self.current_image].crop((left, top, right, bottom))
             cropped_image.save(f'table_{self.current_image}_{idx}.png')
         print(f"{len(self.rectangles)} tables saved.")
+
+    def pil_image_to_qimage(self, pil_image):
+        image = pil_image.convert('RGB')
+        data = image.tobytes("raw", "RGB")
+        qimage = QImage(data, pil_image.width, pil_image.height, QImage.Format_RGB888)
+        return qimage
+
 
 
 if __name__ == '__main__':
