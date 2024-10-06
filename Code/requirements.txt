@@ -16,3 +16,4 @@ numpy==1.26.4
 PyQt5==5.15.11
 pandas==2.2.3
 opencv-python==4.5.5.62
+poppler-utils==0.1.0
