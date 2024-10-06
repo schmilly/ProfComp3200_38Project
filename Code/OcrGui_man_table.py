@@ -43,7 +43,6 @@ import ocr_pipe as rtr
 import luminosity_table_detection as ltd
 
 
-
 class ExcludeMainLoggerFilter(logging.Filter):
     def filter(self, record):
         return record.name != '__main__'
@@ -83,18 +82,21 @@ class EmittingStream(QObject):
     def flush(self):
         pass
 
-class LineItem(QGraphicsObject):
+class LineItem(QObject, QGraphicsLineItem):
     moved = pyqtSignal(QLineF)  # Signal emitted when the line is moved
 
     def __init__(self, line, parent=None):
-        super().__init__(parent)
+        QObject.__init__(self)  # Initialize QObject first
+        QGraphicsLineItem.__init__(self, line, parent)  # Then initialize QGraphicsLineItem
+
+        self.setLine(line)
+
         self.setFlags(
-            QGraphicsObject.ItemIsSelectable |
-            QGraphicsObject.ItemIsMovable |
-            QGraphicsObject.ItemSendsGeometryChanges
+            QGraphicsLineItem.ItemIsSelectable |
+            QGraphicsLineItem.ItemIsMovable |
+            QGraphicsLineItem.ItemSendsGeometryChanges
         )
-        self.setPen(QPen(QColor(0, 255, 0), 2))
-        self.line = line
+        self.setPen(QPen(QColor(0, 255, 0), 2))  # Green pen
         self._previous_line = QLineF(line)
 
         # Determine orientation
@@ -106,33 +108,42 @@ class LineItem(QGraphicsObject):
             self.orientation = 'unknown'
 
     def boundingRect(self):
-        return QRectF(self.line.p1(), self.line.p2()).normalized()
+        return QRectF(self.line().p1(), self.line().p2()).normalized()
 
     def paint(self, painter, option, widget=None):
         painter.setPen(self.pen())
-        painter.drawLine(self.line)
+        painter.drawLine(self.line())
 
     def mouseMoveEvent(self, event):
         """Restrict movement based on orientation."""
         new_pos = event.scenePos()
         if self.orientation == 'vertical':
             # Move vertically by updating y-coordinates
-            dy = new_pos.y() - self.line.p1().y()
-            self.line.translate(0, dy)
+            dy = new_pos.y() - self.line().p1().y()
+            new_line = QLineF(
+                self.line().p1(),
+                self.line().p2() + QPointF(0, dy)
+            )
+            self.setLine(new_line)
         elif self.orientation == 'horizontal':
             # Move horizontally by updating x-coordinates
-            dx = new_pos.x() - self.line.p1().x()
-            self.line.translate(dx, 0)
+            dx = new_pos.x() - self.line().p1().x()
+            new_line = QLineF(
+                self.line().p1(),
+                self.line().p2() + QPointF(dx, 0)
+            )
+            self.setLine(new_line)
         else:
             super().mouseMoveEvent(event)
         self.update()
 
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
-        new_line = self.line
+        new_line = self.line()
         if new_line != self._previous_line:
             self.moved.emit(new_line)
             self._previous_line = new_line
+
 
 class PDFGraphicsView(QGraphicsView):
     rectangleSelected = pyqtSignal(QRectF)
@@ -159,9 +170,9 @@ class PDFGraphicsView(QGraphicsView):
         self.cropping_mode = False
         self.adding_vertical_line = False
         self.adding_horizontal_line = False
-        self.manual_table_detection_mode = False 
+        self.manual_table_detection_mode = False
 
-        # Connect signals
+
         try:
             self.rectangleSelected.connect(self.get_main_window().on_rectangle_selected)
             self.lineModified.connect(self.get_main_window().on_line_modified)
@@ -229,7 +240,8 @@ class PDFGraphicsView(QGraphicsView):
                     orientation = 'vertical'
 
             line = QLineF(start_point, end_point)
-            line_item = LineItem(line)
+            line_item = LineItem(line)  # Parent defaults to None
+            line_item.orientation = orientation  # Set orientation attribute
             self.scene().addItem(line_item)
             self._line_items.append(line_item)
 
@@ -253,12 +265,22 @@ class PDFGraphicsView(QGraphicsView):
         try:
             # Capture the previous line position
             previous_line = line_item._previous_line
+
             # Create MoveLineAction
             action = MoveLineAction(self, line_item, previous_line, new_line)
             self.undo_stack.append(action)
             self.redo_stack.clear()
             self.lineModified.emit()
             self.logger.info(f"Line moved from {previous_line} to {new_line}")
+
+            # Update the lines dictionary
+            key = f"{self.current_page_index}_full"
+            if key in self.lines:
+                try:
+                    self.lines[key].remove(previous_line)
+                    self.lines[key].append(new_line)
+                except ValueError:
+                    self.logger.warning(f"Line {previous_line} not found in lines[{key}].")
         except Exception as e:
             self.logger.error(f"Error handling line movement: {e}", exc_info=True)
             self.get_main_window().show_error_message(f"Failed to move line: {e}")
@@ -632,17 +654,33 @@ class PDFGraphicsView(QGraphicsView):
         else:
             self.setDragMode(QGraphicsView.ScrollHandDrag)
 
-    def display_lines(self, lines):
+    def display_lines(self, lines, key=None):
         """Display detected table lines on the image."""
         try:
             pen = QPen(QColor(0, 255, 0), 2)  # Green lines for tables
+            key = key or f"{self.current_page_index}_full"
+
+            # Clear existing lines for the key
+            existing_lines = self.lines.get(key, [])
+            for line in existing_lines:
+                for item in self._line_items:
+                    if item.line() == line:
+                        self.scene().removeItem(item)
+                        self._line_items.remove(item)
+                        break
+
+            # Add new lines
+            self.lines[key] = lines
             for line in lines:
-                line_item = QGraphicsLineItem(line)
+                line_item = LineItem(line)
                 line_item.setPen(pen)
-                line_item.setZValue(1)  # Ensure lines are above the image
                 self.scene().addItem(line_item)
                 self._line_items.append(line_item)
-            self.logger.info(f"Displayed {len(lines)} table lines.")
+
+                # Connect the moved signal
+                line_item.moved.connect(lambda new_line, item=line_item: self.on_line_moved(item, new_line))
+
+            self.logger.info(f"Displayed {len(lines)} table lines for key '{key}'.")
         except Exception as e:
             self.logger.error(f"Error displaying table lines: {e}", exc_info=True)
             self.show_error_message(f"Failed to display table lines: {e}")
@@ -659,14 +697,19 @@ class PDFGraphicsView(QGraphicsView):
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
+        else:
+            event.ignore()
 
-    def dropEvent(self, event: QDropEvent):
+    def dropEvent(self, event):
         try:
             if event.mimeData().hasUrls():
                 urls = event.mimeData().urls()
                 for url in urls:
                     if url.isLocalFile():
                         file_path = url.toLocalFile()
+                        
+                        # Log the dropped file
+                        self.get_main_window.logger.debug(f"Dropped file: {file_path}")
                         
                         # First, try to guess the MIME type
                         mime_type, _ = mimetypes.guess_type(file_path)
@@ -680,22 +723,25 @@ class PDFGraphicsView(QGraphicsView):
                             elif ext in ['.png', '.jpg', '.jpeg']:
                                 mime_type = 'image/' + ext.lstrip('.')
                         
+                        # Log the detected MIME type
+                        self.get_main_window.logger.debug(f"File: {file_path}, MIME type: {mime_type}")
+                        
                         if mime_type == 'application/pdf':
-                            self.get_main_window.load_pdf(file_path)  # Load the PDF if it's valid
+                            self.load_pdf(file_path)
                         elif mime_type in ['image/png', 'image/jpeg', 'image/jpg']:
                             image = QImage(file_path)
                             if image.isNull():
-                                self.get_main_window().show_error_message(f"Failed to load image: {file_path}")
-                                self.logger.error(f"Failed to load image: {file_path}")
+                                self.get_main_window.show_error_message(f"Failed to load image: {file_path}")
+                                self.get_main_window.logger.error(f"Failed to load image: {file_path}")
                             else:
                                 self.load_image(image)
                         else:
-                            self.get_main_window().show_error_message("Invalid file type. Only PDF or image files supported.")
+                            self.get_main_window.show_error_message("Invalid file type. Only PDF or image files supported.")
             else:
-                self.get_main_window().show_error_message("Invalid file(s). Please drop local files only.")
+                self.get_main_window.show_error_message("Invalid file(s). Please drop local files only.")
         except Exception as e:
-            self.get_main_window().show_error_message(f"An error occurred while dropping files: {e}")
-            self.logger.error(f"Error in dropEvent: {e}")
+            self.get_main_window.show_error_message(f"An error occurred while dropping files: {e}")
+            self.get_main_window.logger.error(f"Error in dropEvent: {e}")
 
 class Action:
     """Base class for actions that can be undone/redone."""
@@ -962,6 +1008,7 @@ class OCRApp(QMainWindow):
         self.pil_images = []
         self.qimages = []
         self.setAcceptDrops(True)
+        self.load_recent_files()
 
         # Signals for OCR processing
         self.ocr_worker = OcrGui()
@@ -1186,19 +1233,19 @@ class OCRApp(QMainWindow):
         # Manual Table Detection Action
         self.manual_table_detection_action = QAction("Manual Table Detection", self)
         self.manual_table_detection_action.setCheckable(True)
-        self.manual_table_detection_action.triggered.connect(self.toggle_manual_table_detection)
+        self.manual_table_detection_action.triggered.connect(self.graphics_view.enable_manual_table_detection)
         tool_bar.addAction(self.manual_table_detection_action)
 
         # Add Vertical Line Action
         self.add_vertical_line_action = QAction('Add Vertical Line', self)
         self.add_vertical_line_action.setCheckable(True)
-        self.add_vertical_line_action.triggered.connect(self.toggle_add_vertical_line_mode)
+        self.add_vertical_line_action.triggered.connect(self.graphics_view.toggle_add_vertical_line_mode)
         tool_bar.addAction(self.add_vertical_line_action)
 
         # Add Horizontal Line Action
         self.add_horizontal_line_action = QAction('Add Horizontal Line', self)
         self.add_horizontal_line_action.setCheckable(True)
-        self.add_horizontal_line_action.triggered.connect(self.toggle_add_horizontal_line_mode)
+        self.add_horizontal_line_action.triggered.connect(self.graphics_view.toggle_add_horizontal_line_mode)
         tool_bar.addAction(self.add_horizontal_line_action)
 
         # Group the line actions to make them exclusive
@@ -1253,32 +1300,8 @@ class OCRApp(QMainWindow):
         # Set default tab to Log Output
         self.output_tabs.setCurrentWidget(self.log_output)
 
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.output_dock)                 
-
-    def toggle_manual_table_detection(self, checked):
-        """Toggle manual table detection mode in the PDFGraphicsView."""
-        if checked:
-            self.status_bar.showMessage('Manual Table Detection Mode Activated. You can add/move lines and rectangles.', 5000)
-            self.graphics_view.enable_manual_table_detection(True)
-        else:
-            self.status_bar.showMessage('Manual Table Detection Mode Deactivated.', 5000)
-            self.graphics_view.enable_manual_table_detection(False)
-
-    def toggle_add_vertical_line_mode(self, checked):
-        if checked:
-            self.status_bar.showMessage('Vertical Line Mode: Click on the image to add a vertical line.', 5000)
-            self.graphics_view.setDragMode(QGraphicsView.NoDrag)
-        else:
-            self.status_bar.showMessage('Vertical Line Mode Disabled.', 5000)
-            self.graphics_view.setDragMode(QGraphicsView.ScrollHandDrag)
-            
-    def toggle_add_horizontal_line_mode(self, checked):
-        if checked:
-            self.status_bar.showMessage('Horizontal Line Mode: Click on the image to add a horizontal line.', 5000)
-            self.graphics_view.setDragMode(QGraphicsView.NoDrag)
-        else:
-            self.status_bar.showMessage('Horizontal Line Mode Disabled.', 5000)
-            self.graphics_view.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.output_dock) 
+        self.output_dock.raise_()                
 
     def show_help_tab(self, title, content):
         try:
@@ -1296,25 +1319,25 @@ class OCRApp(QMainWindow):
             layout.addWidget(text_browser)
 
             # Check if the tab already exists
-            for index in range(self.tab_widget.count()):
-                if self.tab_widget.tabText(index) == title:
-                    self.tab_widget.setCurrentIndex(index)
+            for index in range(self.output_tabs.count()):
+                if self.output_tabs.tabText(index) == title:
+                    self.output_tabs.setCurrentIndex(index)
                     return
 
             # Add the help_widget as a new tab
-            self.tab_widget.addTab(help_widget, title)
-            self.tab_widget.setCurrentWidget(help_widget)
+            self.output_tabs.addTab(help_widget, title)
+            self.output_tabs.setCurrentWidget(help_widget)
 
-            self.logging.info(f"Help tab '{title}' displayed successfully.")
+            self.logger.info(f"Help tab '{title}' displayed successfully.")
         except Exception as e:
-            self.logging.error(f"Error displaying help tab: {e}", exc_info=True)
+            self.logger.error(f"Error displaying help tab: {e}", exc_info=True)
             QMessageBox.critical(self, "Error", f"An error occurred while displaying help:\n{e}")
 
     def show_help_tab_from_file(self):
         try:
             help_file_path = os.path.join(os.path.dirname(__file__), 'help.txt')
             if not os.path.exists(help_file_path):
-                self.logging.error(f"Help file not found at {help_file_path}")
+                self.logger.error(f"Help file not found at {help_file_path}")
                 QMessageBox.warning(self, "Help File Missing", f"The help file 'help.txt' was not found in the application directory.")
                 return
 
@@ -1325,7 +1348,7 @@ class OCRApp(QMainWindow):
             self.show_help_tab("How to Use", help_content)
 
         except Exception as e:
-            self.logging.error(f"Failed to load help file: {e}", exc_info=True)
+            self.logger.error(f"Failed to load help file: {e}", exc_info=True)
             QMessageBox.critical(self, "Error", f"An error occurred while loading the help file:\n{e}")
 
     def update_progress_bar(self, tasks_completed, total_tasks):
@@ -1342,9 +1365,44 @@ class OCRApp(QMainWindow):
             action.triggered.connect(lambda checked, path=file_path: self.open_recent_file(path))
             self.recent_files_menu.addAction(action)
 
+    def load_recent_files(self):
+        """Load recent files from an external JSON log file."""
+        try:
+            recent_files_path = os.path.join(self.project_folder or os.getcwd(), 'recent_files.json')
+            if os.path.exists(recent_files_path):
+                with open(recent_files_path, 'r', encoding='utf-8') as f:
+                    self.recent_files = json.load(f)
+                self.logger.info("Recent files loaded successfully.")
+            else:
+                self.recent_files = []
+        except Exception as e:
+            self.logger.error(f"Failed to load recent files: {e}", exc_info=True)
+            self.recent_files = []
+
+    def save_recent_files(self):
+        """Save recent files to an external JSON log file."""
+        try:
+            recent_files_path = os.path.join(self.project_folder or os.getcwd(), 'recent_files.json')
+            with open(recent_files_path, 'w', encoding='utf-8') as f:
+                json.dump(self.recent_files, f, indent=4)
+            self.logger.info("Recent files saved successfully.")
+        except Exception as e:
+            self.logger.error(f"Failed to save recent files: {e}", exc_info=True)
+
+    def update_recent_files(self, file_path):
+        """Add a file to the recent files list without duplicates."""
+        if file_path in self.recent_files:
+            self.recent_files.remove(file_path)
+        self.recent_files.insert(0, file_path)
+        if len(self.recent_files) > 5:
+            self.recent_files = self.recent_files[:5]
+        self.update_recent_files_menu()
+
     def open_recent_file(self, file_path):
+        """Open a file from the recent files list."""
         if os.path.exists(file_path):
             self.process_files([file_path])
+            self.update_recent_files(file_path)
         else:
             QMessageBox.warning(self, 'File Not Found', f'The file {file_path} does not exist.')
             self.recent_files.remove(file_path)
@@ -1449,6 +1507,7 @@ class OCRApp(QMainWindow):
         file_name, _ = QFileDialog.getOpenFileName(self, "Open File", "", "PDF Files (*.pdf);;Image Files (*.png);;All Files (*)", options=options)
         if file_name:
             self.process_files([file_name])
+            self.update_recent_files(file_name)
 
     def on_rectangle_selected(self, rect):
         """Handle the event when a rectangle is selected for cropping in the graphics view."""
@@ -1464,16 +1523,17 @@ class OCRApp(QMainWindow):
                 raise ValueError("Cropping returned None.")
 
             # Save the cropped image
-            cropped_image_path, page_index, cropped_index = self.save_cropped_image(cropped_image)
+            cropped_image_path, page_index, cropped_index = self.save_cropped_image(cropped_image, rect)
 
             if cropped_image_path:
-                # Add the cropping action to the undo stack
-                action = AddCroppedImageAction(self, cropped_image_path, page_index, cropped_index)
-                self.graphics_view.undo_stack.append(action)
-                self.graphics_view.redo_stack.clear()
-                self.logger.info("Cropping action added to undo stack.")
+                # Emit the signal with necessary parameters
+                self.croppedImageCreated.emit(page_index, cropped_index, cropped_image_path)
+
+                # Optionally, refresh the project list to show the new cropped image
+                self.populate_project_list()
 
                 self.cropping_mode_action.setChecked(False)
+                self.graphics_view.enable_cropping_mode(False)
                 self.logger.info("Cropping mode turned off after cropping action.")
 
             return cropped_image_path, page_index, cropped_index
@@ -1704,20 +1764,20 @@ class OCRApp(QMainWindow):
             image = QImage(str(path))
             if image.isNull():
                 raise ValueError("Failed to load image. File may be corrupted.")
-            
+
             # Set project_folder to a dedicated directory for the project
             self.project_folder = os.path.join(os.path.dirname(os.path.abspath(path)), "OCR_Project")
             os.makedirs(self.project_folder, exist_ok=True)
             self.logger.info(f"Project folder set to: {self.project_folder}")
-            
+
             # Convert QImage to PIL Image for consistency
             pil_image = Image.open(str(path)).convert('RGB')
             self.pil_images.append(pil_image)
-            
+
             # Convert PIL Image to QImage
             qimage = self.pil_image_to_qimage(pil_image)
             self.qimages.append(qimage)
-            
+
             # Save the image as an image file in the temporary directory
             temp_dir = Path('temp_images')
             temp_dir.mkdir(exist_ok=True)
@@ -1725,13 +1785,13 @@ class OCRApp(QMainWindow):
             image_file_path = temp_dir / f"image_{page_index + 1}.png"
             pil_image.save(image_file_path, "PNG")
             self.image_file_paths.append(str(image_file_path))
-            
+
             # Load the image into the graphics view
             self.graphics_view.load_image(qimage)
-            
+
             # Populate the project list with the new image as a top-level item
             self.populate_project_list()
-            
+
             # Display the newly added image
             self.current_page_index = len(self.pil_images) - 1
             self.show_current_page()
@@ -1739,6 +1799,8 @@ class OCRApp(QMainWindow):
 
             # Enable actions once an image is loaded
             self.enable_actions_after_loading()
+
+            self.update_recent_files(str(path))  # Update recent files
 
             self.logger.info(f"Image loaded and added to project: {path}")
 
@@ -1931,8 +1993,13 @@ class OCRApp(QMainWindow):
                 self.graphics_view._rect_items.append(rect_item)
 
             # Load existing lines if any
-            page_lines = self.lines.get(self.current_page_index, [])
-            self.graphics_view.display_lines(page_lines)
+            key = f"{self.current_page_index}_full"
+            page_lines = self.lines.get(key, [])
+            self.graphics_view.display_lines(page_lines, key=key)
+
+            # Automatically trigger table detection for the first page
+            if self.current_page_index == 0:
+                self.detect_tables()
 
         except Exception as e:
             self.logger.error(f"Failed to display page {self.current_page_index}: {e}", exc_info=True)
@@ -1978,17 +2045,7 @@ class OCRApp(QMainWindow):
             rect_item.setPen(QPen(QColor(255, 0, 0), 2))  # Red pen
             self.graphics_view.scene().addItem(rect_item)
 
-            # Emit the signal
-            self.croppedImageCreated.emit(self.current_page_index, cropped_index, cropped_image_path)
-
-            # Create and push AddCroppedImageAction to undo stack
-            action = AddCroppedImageAction(self, cropped_image_path, self.current_page_index, cropped_index, rect_item)
-            self.undo_stack.append(action)
-            self.redo_stack.clear()
-
-            self.logger.info(f"Cropped image emitted and action added for page {self.current_page_index + 1}, index {cropped_index}")
-
-            # Return the cropped image details
+            # Emit the signal with cropped image details
             return cropped_image_path, self.current_page_index, cropped_index
 
         except Exception as e:
@@ -2384,47 +2441,6 @@ class OCRApp(QMainWindow):
         self.ocr_running = False
         self.run_ocr_action.setText('Run OCR')
 
-    def show_help_tab(self, title, content):
-        # Check if tab already exists
-        for i in range(self.output_tabs.count()):
-            if self.output_tabs.tabText(i) == title:
-                self.output_tabs.setCurrentIndex(i)
-                return
-        # Create new tab
-        text_edit = QTextEdit()
-        text_edit.setReadOnly(True)
-        text_edit.setPlainText(content)
-        self.output_tabs.addTab(text_edit, title)
-        self.output_tabs.setCurrentWidget(text_edit)
-
-    def email_csv(self):
-        if not self.last_csv_path or not os.path.exists(self.last_csv_path):
-            self.show_error_message('No CSV file available to email. Please run OCR first.')
-            return
-
-        recipient, ok = QInputDialog.getText(self, 'Email CSV', 'Enter recipient email:')
-        if ok and recipient:
-            try:
-                self.send_email(recipient, self.last_csv_path)
-                QMessageBox.information(self, 'Email Sent', 'CSV file emailed successfully.')
-            except Exception as e:
-                self.show_error_message(f'Failed to send email: {e}')
-
-    def send_email(self, recipient, attachment_path=None):
-        subject = "OCR CSV Results"
-        body = "Please find the attached CSV file with OCR results."
-
-        # Create the mailto link
-        mailto_link = f"mailto:{recipient}?subject={urllib.parse.quote(subject)}&body={urllib.parse.quote(body)}"
-
-        # If there's an attachment, include a note in the body (Note: mailto does not support attachments directly)
-        if attachment_path:
-            attachment_note = f"\n\nPlease manually attach the file: {attachment_path}"
-            mailto_link = f"mailto:{recipient}?subject={urllib.parse.quote(subject)}&body={urllib.parse.quote(body + attachment_note)}"
-
-        # Open the default email client with the mailto link
-        webbrowser.open(mailto_link)
-
     def save_csv(self):
         # Read data from the tableWidget and write to CSV
         row_count = self.tableWidget.rowCount()
@@ -2579,6 +2595,8 @@ def main():
     try:
         logger.info("Entering the main event loop.")
         sys.exit(app.exec_())
+        window.save_recent_files()
+        sys.exit(exit_code)
     except Exception as e:
         logger.critical(f"An unexpected error occurred during execution: {e}", exc_info=True)
         QMessageBox.critical(
