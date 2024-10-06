@@ -30,6 +30,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QPixmap, QImage, QPen, QColor, QPainter, QFont, QDragEnterEvent, QDropEvent
 from PyQt5.QtCore import Qt, QRectF, QObject, pyqtSignal, QLineF, QThread
+from PIL import Image
 from pdf2image import convert_from_path
 from logging.handlers import RotatingFileHandler
 
@@ -119,7 +120,7 @@ class PDFGraphicsView(QGraphicsView):
             self.rectangleSelected.connect(self.get_main_window().on_rectangle_selected)
             self.lineModified.connect(self.get_main_window().on_line_modified)
         except Exception as e:
-            self.logger.error(f"Error connecting signals: {e}")
+            self.logger.error(f"Error during PDF processing: {str(e)}")
 
     def get_main_window(self):
         """Traverse the parent hierarchy to get the QMainWindow (OCRApp) instance."""
@@ -366,20 +367,6 @@ class PDFGraphicsView(QGraphicsView):
         except Exception as e:
             self.get_main_window().show_error_message(f"An error occurred while dropping files: {e}")
             self.logger.error(f"Error in dropEvent: {e}")
-    
-        def resizeEvent(self, event):
-            """
-            Handles the resize event of the QGraphicsView (canvas).
-            Automatically called when the window or view is resized.
-            """
-            # Call the base class implementation to ensure default behavior
-            super().resizeEvent(event)
-
-            # Custom logic for handling canvas resizing
-            self.on_canvas_resize()
-
-            # Optionally, you can log or do further actions if needed
-            self.logger.info("Canvas resized.")
 
 class Action:
     """Base class for actions that can be undone/redone."""
@@ -1191,6 +1178,50 @@ class OCRApp(QMainWindow):
         except Exception as e:
             self.show_error_message(f"An error occurred while processing files: {e}")
             self.logger.error(f"Error in process_files: {e}")
+    
+    def save_project(self):
+        options = QFileDialog.Options()
+        save_path, _ = QFileDialog.getSaveFileName(self, "Save Project As", "", "Project Files (*.proj);;All Files (*)", options=options)
+        if save_path:
+            project_data = {
+                'current_pdf_path': self.current_pdf_path,
+                'rectangles': self.rectangles,
+                'lines': self.lines,
+                'current_page_index': self.current_page_index,
+                # Include any other relevant data
+            }
+            with open(save_path, 'wb') as f:
+                pickle.dump(project_data, f)
+            QMessageBox.information(self, 'Save Successful', 'Project saved successfully.')
+
+    def load_project(self):
+        options = QFileDialog.Options()
+        load_path, _ = QFileDialog.getOpenFileName(self, "Open Project", "", "Project Files (*.proj);;All Files (*)", options=options)
+        if load_path:
+            with open(load_path, 'rb') as f:
+                project_data = pickle.load(f)
+            # Restore the state
+            self.current_pdf_path = project_data['current_pdf_path']
+            self.rectangles = project_data['rectangles']
+            self.lines = project_data['lines']
+            self.current_page_index = project_data['current_page_index']
+            # Reload the PDF and annotations
+            self.load_pdf(self.current_pdf_path)
+            self.change_page(self.current_page_index)
+            QMessageBox.information(self, 'Load Successful', 'Project loaded successfully.')
+
+    def initialize_ocr_engines(self):
+            self.status_bar.showMessage('Initializing OCR engines...')
+            QApplication.processEvents()
+            try:
+                self.ocr_engine = rtr.initialize_paddleocr()
+                self.easyocr_engine = rtr.initialize_easyocr()
+                rtr.configure_logging()
+                self.ocr_initialized = True
+                self.status_bar.showMessage('OCR engines initialized', 5000)
+            except Exception as e:
+                self.show_error_message(f'Failed to initialize OCR engines: {e}')
+                self.ocr_initialized = False
 
     def load_pdf(self, file_path):
         """Load a PDF and convert each page into PIL and QImage formats."""
@@ -1203,25 +1234,12 @@ class OCRApp(QMainWindow):
             if not pil_images:
                 raise ValueError('No pages found in the PDF.')
             
-            self.pil_images = pil_images  # Store PIL Images
+            self.pil_images = pil_images  # Store PIL Images in memory
             
-            # Convert PIL Images to QImages
+            # Convert PIL Images to QImages for immediate display
             self.qimages = [self.pil_image_to_qimage(pil_img) for pil_img in pil_images]
             
             self.current_page_index = 0  # Start from the first page
-            # self.load_image(self.qimages[self.current_page_index])  # Removed
-            
-            # Save each page as an image file
-            temp_dir = Path('temp_images')
-            temp_dir.mkdir(exist_ok=True)
-            self.image_file_paths = []
-            for idx, pil_img in enumerate(self.pil_images):
-                image_file_path = temp_dir / f"page_{idx + 1}.png"
-                pil_img.save(image_file_path, "PNG")
-                self.image_file_paths.append(image_file_path)
-            
-            # Populate the project list with page names as top-level items
-            self.populate_project_list()
             
             # Display the first page initially
             self.show_current_page()
@@ -1265,17 +1283,10 @@ class OCRApp(QMainWindow):
             self.logger.error(f"Error updating page label: {e}")
 
     def show_current_page(self):
-        """Display the current page in the graphics view by loading it from disk."""
+        """Display the current page in the graphics view."""
         try:
-            # Check if the current page index is valid
-            if not self.image_file_paths or self.current_page_index >= len(self.image_file_paths):
-                self.logger.error(f'Invalid page index: {self.current_page_index}')
-                return
-
-            # Load the image for the current page from disk
-            image_file_path = self.image_file_paths[self.current_page_index]
-            pil_image = self.pil_images[self.current_page_index]
-            qimage = self.pil_image_to_qimage(pil_image)  # Convert PIL Image to QImage
+            # Display the current QImage for the page
+            qimage = self.qimages[self.current_page_index]  # Use in-memory image
             self.graphics_view.load_image(qimage)  # Directly call PDFGraphicsView's load_image
 
             # Log the successful loading of the page
@@ -1306,10 +1317,9 @@ class OCRApp(QMainWindow):
     def save_cropped_image(self, cropped_image):
         """Save the cropped image to disk and update internal structures."""
         try:
-            cropped_image_path = os.path.join(
-                self.project_folder,
-                f"cropped_page_{self.current_page_index + 1}_{len(self.cropped_images.get(self.current_page_index, [])) + 1}.png"
-            )
+            if self.current_page_index not in self.cropped_images:
+                self.cropped_images[self.current_page_index] = []
+            self.cropped_images[self.current_page_index].append(cropped_image)
 
             # Ensure the cropped image directory exists
             os.makedirs(os.path.dirname(cropped_image_path), exist_ok=True)
@@ -1339,38 +1349,6 @@ class OCRApp(QMainWindow):
         Convert a PDF file into a list of PIL images for manual table detection.
         """
         return convert_from_path(pdf_file_path)
-
-
-    def save_project(self):
-        options = QFileDialog.Options()
-        save_path, _ = QFileDialog.getSaveFileName(self, "Save Project As", "", "Project Files (*.proj);;All Files (*)", options=options)
-        if save_path:
-            project_data = {
-                'current_pdf_path': self.current_pdf_path,
-                'rectangles': self.rectangles,
-                'lines': self.lines,
-                'current_page_index': self.current_page_index,
-                # Include any other relevant data
-            }
-            with open(save_path, 'wb') as f:
-                pickle.dump(project_data, f)
-            QMessageBox.information(self, 'Save Successful', 'Project saved successfully.')
-
-    def load_project(self):
-        options = QFileDialog.Options()
-        load_path, _ = QFileDialog.getOpenFileName(self, "Open Project", "", "Project Files (*.proj);;All Files (*)", options=options)
-        if load_path:
-            with open(load_path, 'rb') as f:
-                project_data = pickle.load(f)
-            # Restore the state
-            self.current_pdf_path = project_data['current_pdf_path']
-            self.rectangles = project_data['rectangles']
-            self.lines = project_data['lines']
-            self.current_page_index = project_data['current_page_index']
-            # Reload the PDF and annotations
-            self.load_pdf(self.current_pdf_path)
-            self.change_page(self.current_page_index)
-            QMessageBox.information(self, 'Load Successful', 'Project loaded successfully.')
 
     def pil_image_to_qimage(self, pil_image):
         """Convert PIL Image to QImage."""
@@ -1414,45 +1392,6 @@ class OCRApp(QMainWindow):
         except Exception as e:
             self.show_error_message(f'Failed to initialize OCR engines: {e}')
             self.ocr_initialized = False
-
-    def run_ocr(self):
-        if not self.ocr_initialized:
-            self.show_error_message('Please initialize the OCR engines before running OCR.')
-            return
-
-        if self.ocr_running:
-            # Cancel OCR
-            self.ocr_cancel_event.set()
-            self.status_bar.showMessage('Cancelling OCR...', 5000)
-            self.run_ocr_action.setText('Run OCR')
-            self.ocr_running = False
-        else:
-            # Start OCR
-            self.status_bar.showMessage('Running OCR...', 5000)
-            QApplication.processEvents()
-            self.save_current_rectangles()
-            self.save_current_lines()
-            self.progress_bar = QProgressBar()
-            self.status_bar.addPermanentWidget(self.progress_bar)
-            total_tasks = len(self.pdf_images)  # Calculate total tasks
-            self.progress_bar.setMaximum(total_tasks)
-            self.progress_bar.setValue(0)
-            self.ocr_cancel_event = threading.Event()
-            self.run_ocr_action.setText('Cancel OCR')
-            self.ocr_running = True
-
-            # Prepare paths
-            storedir = os.path.abspath("temp_gui")
-            os.makedirs(storedir, exist_ok=True)
-            pdf_file = self.current_pdf_path
-            output_csv = os.path.join(self.project_folder, "ocr_results.csv")
-
-            # Start the OCRWorker thread
-            self.ocr_worker = OCRWorker(pdf_file, storedir, output_csv, self.ocr_cancel_event)
-            self.ocr_worker.ocr_progress.connect(self.on_ocr_progress)
-            self.ocr_worker.ocr_completed.connect(self.on_ocr_completed)
-            self.ocr_worker.ocr_error.connect(self.on_ocr_error)
-            self.ocr_worker.start()
     
     def export_to_excel(self):
         if self.last_csv_path and os.path.exists(self.last_csv_path):
@@ -1891,21 +1830,48 @@ class OCRApp(QMainWindow):
             self.logger.error(f"Error updating project explorer: {e}", exc_info=True)
             self.show_error_message(f"Failed to update project explorer: {e}")
 
-    def cleanup_temp_images(self):
-        """Delete all temporary directories and their contents."""
-        temp_dirs = ['temp_images', 'temp_gui']
-        for dir_name in temp_dirs:
-            temp_dir = Path(dir_name)
-            if temp_dir.exists() and temp_dir.is_dir():
-                try:
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-                    self.logger.info(f"Deleted temporary directory: {temp_dir}")
-                except Exception as e:
-                    self.logger.error(f"Failed to delete temporary directory {temp_dir}: {e}", exc_info=True)
-
     def closeEvent(self, event):
         self.cleanup_temp_images()
         event.accept()
+    
+    def run_ocr(self):
+        if not self.ocr_initialized:
+            self.show_error_message('Please initialize the OCR engines before running OCR.')
+            return
+
+        if self.ocr_running:
+            # Cancel OCR
+            self.ocr_cancel_event.set()
+            self.status_bar.showMessage('Cancelling OCR...', 5000)
+            self.run_ocr_action.setText('Run OCR')
+            self.ocr_running = False
+        else:
+            # Start OCR
+            self.status_bar.showMessage('Running OCR...', 5000)
+            QApplication.processEvents()
+            self.save_current_rectangles()
+            self.save_current_lines()
+            self.progress_bar = QProgressBar()
+            self.status_bar.addPermanentWidget(self.progress_bar)
+            total_tasks = len(self.pdf_images)  # Calculate total tasks
+            self.progress_bar.setMaximum(total_tasks)
+            self.progress_bar.setValue(0)
+            self.ocr_cancel_event = threading.Event()
+            self.run_ocr_action.setText('Cancel OCR')
+            self.ocr_running = True
+
+            # Prepare paths
+            storedir = os.path.abspath("temp_gui")
+            os.makedirs(storedir, exist_ok=True)
+            pdf_file = self.current_pdf_path
+            output_csv = os.path.join(self.project_folder, "ocr_results.csv")
+
+            # Start the OCRWorker thread
+            self.ocr_worker = OCRWorker(pdf_file, storedir, output_csv, self.ocr_cancel_event)
+            self.ocr_worker.ocr_progress.connect(self.on_ocr_progress)
+            self.ocr_worker.ocr_completed.connect(self.on_ocr_completed)
+            self.ocr_worker.ocr_error.connect(self.on_ocr_error)
+            self.ocr_worker.start()
 
 def main():
     # Configure logging at the very start
