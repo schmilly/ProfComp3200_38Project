@@ -31,7 +31,7 @@ from PyQt5.QtWidgets import (
     QMenuBar, QMenu, QToolBar, QLabel, QComboBox, QProgressBar, QStatusBar, QTreeWidget, QTreeWidgetItem,
     QPushButton, QMessageBox, QGraphicsPixmapItem, QTableWidget, QTableWidgetItem, QGraphicsObject,
     QDockWidget, QListWidget, QTabWidget, QInputDialog, QWidgetAction, QActionGroup, QTextBrowser, QLineEdit,
-    QDialog, QUndoCommand, QGraphicsItem
+    QDialog, QUndoCommand, QGraphicsItem, QHeaderView
 )
 from PyQt5.QtGui import QPixmap, QImage, QPen, QColor, QPainter, QFont, QDragEnterEvent, QDropEvent, QCursor, QIcon
 from PyQt5.QtCore import Qt, QRectF, QObject, pyqtSignal, QLineF, QThread, QPointF, QSizeF
