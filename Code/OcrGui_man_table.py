@@ -696,9 +696,16 @@ class PDFGraphicsView(QGraphicsView):
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-        else:
-            event.ignore()
+            # Check if any of the URLs is a supported file type
+            for url in event.mimeData().urls():
+                if url.isLocalFile():
+                    file_path = url.toLocalFile()
+                    _, ext = os.path.splitext(file_path)
+                    if ext.lower() in self.get_main_window().SUPPORTED_PDF_FORMATS.union(self.get_main_window().SUPPORTED_IMAGE_FORMATS):
+                        event.acceptProposedAction()
+                        return
+        event.ignore()
+
 
     def dropEvent(self, event):
         try:
@@ -709,7 +716,7 @@ class PDFGraphicsView(QGraphicsView):
                         file_path = url.toLocalFile()
                         
                         # Log the dropped file
-                        self.get_main_window.logger.debug(f"Dropped file: {file_path}")
+                        self.get_main_window().logger.debug(f"Dropped file: {file_path}")
                         
                         # First, try to guess the MIME type
                         mime_type, _ = mimetypes.guess_type(file_path)
@@ -724,24 +731,21 @@ class PDFGraphicsView(QGraphicsView):
                                 mime_type = 'image/' + ext.lstrip('.')
                         
                         # Log the detected MIME type
-                        self.get_main_window.logger.debug(f"File: {file_path}, MIME type: {mime_type}")
+                        self.get_main_window().logger.debug(f"File: {file_path}, MIME type: {mime_type}")
                         
                         if mime_type == 'application/pdf':
-                            self.load_pdf(file_path)
+                            self.get_main_window().process_files([file_path])
+                            self.get_main_window().update_recent_files(file_path)
                         elif mime_type in ['image/png', 'image/jpeg', 'image/jpg']:
-                            image = QImage(file_path)
-                            if image.isNull():
-                                self.get_main_window.show_error_message(f"Failed to load image: {file_path}")
-                                self.get_main_window.logger.error(f"Failed to load image: {file_path}")
-                            else:
-                                self.load_image(image)
+                            self.get_main_window().process_files([file_path])
+                            self.get_main_window().update_recent_files(file_path)
                         else:
-                            self.get_main_window.show_error_message("Invalid file type. Only PDF or image files supported.")
+                            self.get_main_window().show_error_message("Invalid file type. Only PDF or image files supported.")
             else:
-                self.get_main_window.show_error_message("Invalid file(s). Please drop local files only.")
+                self.get_main_window().show_error_message("Invalid file(s). Please drop local files only.")
         except Exception as e:
-            self.get_main_window.show_error_message(f"An error occurred while dropping files: {e}")
-            self.get_main_window.logger.error(f"Error in dropEvent: {e}")
+            self.get_main_window().show_error_message(f"An error occurred while dropping files: {e}")
+            self.get_main_window().logger.error(f"Error in dropEvent: {e}")
 
 class Action:
     """Base class for actions that can be undone/redone."""
