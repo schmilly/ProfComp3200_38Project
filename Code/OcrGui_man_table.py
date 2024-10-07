@@ -16,6 +16,7 @@ import traceback
 from email.message import EmailMessage
 from PyPDF2 import PdfFileReader
 import PyPDF2
+import json
 
 # Third-party imports
 import cv2
@@ -29,7 +30,7 @@ from PyQt5.QtWidgets import (
     QMenuBar, QMenu, QToolBar, QLabel, QComboBox, QProgressBar, QStatusBar, QTreeWidget, QTreeWidgetItem,
     QPushButton, QMessageBox, QGraphicsPixmapItem, QTableWidget, QTableWidgetItem, QGraphicsObject,
     QDockWidget, QListWidget, QTabWidget, QInputDialog, QWidgetAction, QActionGroup, QTextBrowser, QLineEdit,
-    QDialog, QUndoCommand
+    QDialog, QUndoCommand, QGraphicsItem
 )
 from PyQt5.QtGui import QPixmap, QImage, QPen, QColor, QPainter, QFont, QDragEnterEvent, QDropEvent, QCursor 
 from PyQt5.QtCore import Qt, QRectF, QObject, pyqtSignal, QLineF, QThread, QPointF, QSizeF
@@ -71,6 +72,26 @@ def configure_logging():
     console_handler.addFilter(ExcludeMainLoggerFilter())
     logger.addHandler(console_handler)
 
+def exception_hook(exctype, value, tb):
+    """Global exception handler to capture and log uncaught exceptions."""
+    # Log the exception with traceback
+    logging.critical("Uncaught exception", exc_info=(exctype, value, tb))
+    
+    # Format the traceback
+    tb_str = ''.join(traceback.format_exception(exctype, value, tb))
+    
+    # Show the error message to the user
+    QMessageBox.critical(
+        None,
+        "Critical Error",
+        f"An unexpected error occurred:\n\n{tb_str}"
+    )
+    
+    # Exit the application
+    sys.exit(1)
+
+sys.excepthook = exception_hook
+
 class EmittingStream(QObject):
     textWritten = pyqtSignal(str)
 
@@ -82,68 +103,321 @@ class EmittingStream(QObject):
     def flush(self):
         pass
 
-class LineItem(QObject, QGraphicsLineItem):
+
+class LineItem(QGraphicsObject):
     moved = pyqtSignal(QLineF)  # Signal emitted when the line is moved
 
-    def __init__(self, line, parent=None):
-        QObject.__init__(self)  # Initialize QObject first
-        QGraphicsLineItem.__init__(self, line, parent)  # Then initialize QGraphicsLineItem
-
-        self.setLine(line)
-
+    def __init__(self, line, orientation='horizontal', parent=None):
+        super().__init__(parent)
+        self.logger = logging.getLogger(__name__)  # Initialize the logger
+        self.orientation = orientation  # 'horizontal' or 'vertical'
+        self._pen = QPen(QColor(0, 0, 255), 1, Qt.SolidLine)  # Blue pen, 1 pixel wide
+        self.setPen(self._pen)
         self.setFlags(
-            QGraphicsLineItem.ItemIsSelectable |
-            QGraphicsLineItem.ItemIsMovable |
-            QGraphicsLineItem.ItemSendsGeometryChanges
+            QGraphicsObject.ItemIsSelectable |
+            QGraphicsObject.ItemIsMovable |
+            QGraphicsObject.ItemSendsGeometryChanges
         )
-        self.setPen(QPen(QColor(0, 255, 0), 2))  # Green pen
-        self._previous_line = QLineF(line)
-
-        # Determine orientation
-        if line.dx() == 0:
-            self.orientation = 'vertical'
-        elif line.dy() == 0:
-            self.orientation = 'horizontal'
-        else:
-            self.orientation = 'unknown'
+        self.setAcceptHoverEvents(True)
+        self.line = QLineF(line)  # Store the line as an attribute
 
     def boundingRect(self):
-        return QRectF(self.line().p1(), self.line().p2()).normalized()
+        pen_width = self._pen.width()
+        extra = pen_width / 2.0
+        return QRectF(self.line.p1(), self.line.p2()).normalized().adjusted(-extra, -extra, extra, extra)
 
     def paint(self, painter, option, widget=None):
-        painter.setPen(self.pen())
-        painter.drawLine(self.line())
+        try:
+            painter.setPen(self._pen)
+            painter.drawLine(self.line)
+        except Exception as e:
+            self.logger.error(f"Error in LineItem paint: {e}", exc_info=True)
 
-    def mouseMoveEvent(self, event):
-        """Restrict movement based on orientation."""
-        new_pos = event.scenePos()
-        if self.orientation == 'vertical':
-            # Move vertically by updating y-coordinates
-            dy = new_pos.y() - self.line().p1().y()
-            new_line = QLineF(
-                self.line().p1(),
-                self.line().p2() + QPointF(0, dy)
-            )
-            self.setLine(new_line)
-        elif self.orientation == 'horizontal':
-            # Move horizontally by updating x-coordinates
-            dx = new_pos.x() - self.line().p1().x()
-            new_line = QLineF(
-                self.line().p1(),
-                self.line().p2() + QPointF(dx, 0)
-            )
-            self.setLine(new_line)
-        else:
-            super().mouseMoveEvent(event)
+    def setPen(self, pen):
+        self._pen = pen
         self.update()
 
-    def mouseReleaseEvent(self, event):
-        super().mouseReleaseEvent(event)
-        new_line = self.line()
-        if new_line != self._previous_line:
+    def itemChange(self, change, value):
+        if change == QGraphicsObject.ItemPositionChange:
+            new_pos = value
+            delta = new_pos - self.pos()
+            # Update the line position based on orientation
+            if self.orientation == 'horizontal':
+                new_line = QLineF(
+                    self.line.p1().x(),
+                    self.line.p1().y() + delta.y(),
+                    self.line.p2().x(),
+                    self.line.p2().y() + delta.y()
+                )
+                # Prevent horizontal movement
+                new_pos.setX(self.pos().x())
+            elif self.orientation == 'vertical':
+                new_line = QLineF(
+                    self.line.p1().x() + delta.x(),
+                    self.line.p1().y(),
+                    self.line.p2().x() + delta.x(),
+                    self.line.p2().y()
+                )
+                # Prevent vertical movement
+                new_pos.setY(self.pos().y())
+            else:
+                new_line = QLineF(
+                    self.line.p1().x() + delta.x(),
+                    self.line.p1().y() + delta.y(),
+                    self.line.p2().x() + delta.x(),
+                    self.line.p2().y() + delta.y()
+                )
+            self.line = new_line
             self.moved.emit(new_line)
-            self._previous_line = new_line
+            self.update()
+            return new_pos
+        return super().itemChange(change, value)
 
+class RectItem(QGraphicsObject):
+    moved = pyqtSignal(QRectF)
+
+    def __init__(self, rect, parent=None):
+        super().__init__(parent)
+        self.logger = logging.getLogger(__name__) 
+        self._rect = QRectF(rect)
+        self._pen = QPen(QColor(255, 0, 0), 2)  # Red pen
+        self.setFlags(
+            QGraphicsItem.ItemIsSelectable |
+            QGraphicsItem.ItemIsMovable |
+            QGraphicsItem.ItemSendsGeometryChanges
+        )
+
+    def boundingRect(self):
+        pen_width = self._pen.width()
+        extra = pen_width / 2.0
+        return self._rect.normalized().adjusted(-extra, -extra, extra, extra)
+
+    def paint(self, painter, option, widget=None):
+        try:
+            painter.setPen(self._pen)
+            painter.drawRect(self._rect)
+        except Exception as e:
+            self.logger.error(f"Error in RectItem paint: {e}", exc_info=True)
+
+    def setRect(self, rect):
+        self.prepareGeometryChange()
+        self._rect = QRectF(rect)
+        self.update()
+
+    def rect(self):
+        return self._rect
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.ItemPositionChange:
+            # Calculate the movement delta
+            delta = value - self.pos()
+            # Update the rectangle position
+            new_rect = self._rect.translated(delta)
+            self.setRect(new_rect)
+            self.moved.emit(new_rect)
+            return value
+        return super().itemChange(change, value)
+
+class Action:
+    """Base class for actions that can be undone/redone."""
+    def undo(self):
+        pass
+
+    def redo(self):
+        pass
+
+class AddLineAction(QUndoCommand):
+    def __init__(self, app, line_item):
+        super().__init__("Add Line")
+        self.app = app
+        self.line_item = line_item
+
+    def undo(self):
+        self.app.graphics_view.scene().removeItem(self.line_item)
+        self.app.graphics_view._line_items.remove(self.line_item)
+        self.app.logger.info("Undo add: Line removed.")
+
+    def redo(self):
+        self.app.graphics_view.scene().addItem(self.line_item)
+        self.app.graphics_view._line_items.append(self.line_item)
+        self.app.logger.info("Redo add: Line added.")
+
+class AddRectangleAction(Action):
+    def __init__(self, view, rect_item):
+        self.view = view
+        self.rect_item = rect_item
+
+    def undo(self):
+        self.view.scene().removeItem(self.rect_item)
+        self.view._rect_items.remove(self.rect_item)
+
+    def redo(self):
+        self.view.scene().addItem(self.rect_item)
+        self.view._rect_items.append(self.rect_item)
+
+class RemoveLineAction:
+    """Represents an undoable action for removing a line."""
+    def __init__(self, app, line_item):
+        self.app = app
+        self.line_item = line_item
+        self.key = f"{self.app.graphics_view.current_page_index}_full"
+
+    def undo(self):
+        self.app.graphics_view.scene().addItem(self.line_item)
+        if self.key not in self.app.lines:
+            self.app.lines[self.key] = []
+        self.app.lines[self.key].append(self.line_item.line())
+        self.app.lineModified.emit()
+
+    def redo(self):
+        self.app.graphics_view.scene().removeItem(self.line_item)
+        if self.key in self.app.lines:
+            try:
+                self.app.lines[self.key].remove(self.line_item.line())
+            except ValueError:
+                self.app.logger.warning(f"Line {self.line_item.line()} not found in lines[{self.key}].")
+        self.app.lineModified.emit()
+
+class RemoveRectangleAction(Action):
+    def __init__(self, view, rect_item):
+        self.view = view
+        self.rect_item = rect_item
+
+    def undo(self):
+        self.view.scene().addItem(self.rect_item)
+        self.view._rect_items.append(self.rect_item)
+
+    def redo(self):
+        self.view.scene().removeItem(self.rect_item)
+        self.view._rect_items.remove(self.rect_item)
+
+class MoveRectangleAction(QUndoCommand):
+    def __init__(self, app, rect_item, old_rect, new_rect):
+        super().__init__("Move Rectangle")
+        self.app = app
+        self.rect_item = rect_item
+        self.old_rect = old_rect
+        self.new_rect = new_rect
+
+    def undo(self):
+        self.rect_item.setRect(self.old_rect)
+        self.app.logger.info(f"Undo move: Rectangle reverted to {self.old_rect}")
+        self.app.lineModified.emit()
+
+    def redo(self):
+        self.rect_item.setRect(self.new_rect)
+        self.app.logger.info(f"Redo move: Rectangle moved to {self.new_rect}")
+        self.app.lineModified.emit()
+
+class MoveLineAction(QUndoCommand):
+    def __init__(self, app, line_item, old_line, new_line):
+        super().__init__("Move Line")
+        self.app = app
+        self.line_item = line_item
+        self.old_line = old_line
+        self.new_line = new_line
+
+    def undo(self):
+        self.line_item.line = self.old_line
+        self.line_item.update()
+        self.app.logger.info(f"Undo move: Line reverted to {self.old_line}")
+        self.app.graphics_view.lineModified.emit()
+
+    def redo(self):
+        self.line_item.setLine(self.new_line)
+        self.app.logger.info(f"Redo move: Line moved to {self.new_line}")
+        self.app.graphics_view.lineModified.emit()
+
+class AddCroppedImageAction(QUndoCommand):
+    def __init__(self, app, cropped_image_path, page_index, cropped_index, rect_item):
+        super().__init__("Add Cropped Image")
+        self.app = app
+        self.cropped_image_path = cropped_image_path
+        self.page_index = page_index
+        self.cropped_index = cropped_index
+        self.rect_item = rect_item
+
+    def undo(self):
+        try:
+            # Remove the cropped image from internal structures
+            self.app.cropped_images[self.page_index].remove(self.cropped_image_path)
+            
+            # Remove from project list
+            parent_item = self.app.project_list.topLevelItem(self.page_index)
+            for i in range(parent_item.childCount()):
+                child = parent_item.child(i)
+                if child.text(0).endswith(os.path.basename(self.cropped_image_path)):
+                    parent_item.removeChild(child)
+                    break
+
+            # Remove the rectangle from the scene
+            self.app.graphics_view.scene().removeItem(self.rect_item)
+            
+            self.app.logger.info(f"Undo: Removed cropped image {self.cropped_image_path} and corresponding rectangle.")
+        except Exception as e:
+            self.app.logger.error(f"Error undoing cropped image: {e}", exc_info=True)
+
+    def redo(self):
+        try:
+            # Re-add the cropped image to internal structures
+            self.app.cropped_images[self.page_index].append(self.cropped_image_path)
+            
+            # Re-add to project list
+            parent_item = self.app.project_list.topLevelItem(self.page_index)
+            cropped_item_text = f"Cropped {self.cropped_index}: {os.path.basename(self.cropped_image_path)}"
+            cropped_item = QTreeWidgetItem(parent_item)
+            cropped_item.setText(0, cropped_item_text)
+            cropped_item.setFlags(cropped_item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+            parent_item.addChild(cropped_item)
+            parent_item.setExpanded(True)
+
+            # Re-add the rectangle to the scene
+            self.app.graphics_view.scene().addItem(self.rect_item)
+            
+            self.app.logger.info(f"Redo: Re-added cropped image {self.cropped_image_path} and corresponding rectangle.")
+        except Exception as e:
+            self.app.logger.error(f"Error redoing cropped image: {e}", exc_info=True)
+
+class OcrGui(QObject):
+    ocr_progress = pyqtSignal(int, int)
+    ocr_completed = pyqtSignal(tuple)
+    ocr_error = pyqtSignal(str)
+
+class OCRWorker(QThread):
+    ocr_progress = pyqtSignal(int, int)
+    ocr_completed = pyqtSignal(object)
+    ocr_error = pyqtSignal(str)
+
+    def __init__(self, pdf_file, storedir, output_csv, ocr_cancel_event):
+        super().__init__()
+        self.pdf_file = pdf_file
+        self.storedir = storedir
+        self.output_csv = output_csv
+        self.ocr_cancel_event = ocr_cancel_event
+
+    def run(self):
+        try:
+            # Run OCR processing here
+            results = run_ocr_pipeline(
+                self.pdf_file,
+                self.storedir,
+                self.output_csv,
+                self.ocr_progress,
+                self.ocr_cancel_event
+            )
+            # Emit completion signal with results
+            self.ocr_completed.emit(results)
+        except Exception as e:
+            # Capture the exception traceback
+            tb = traceback.format_exc()
+            self.logger.error(f"Error in OCRWorker: {e}\n{tb}")
+            # Emit error signal with the exception message
+            self.ocr_error.emit(str(e))
+
+    def cancel(self):
+        """Method to cancel the OCR process."""
+        self.ocr_cancel_event.set()
+        self.logger.info("OCR cancellation requested.")
 
 class PDFGraphicsView(QGraphicsView):
     rectangleSelected = pyqtSignal(QRectF)
@@ -171,7 +445,7 @@ class PDFGraphicsView(QGraphicsView):
         self.adding_vertical_line = False
         self.adding_horizontal_line = False
         self.manual_table_detection_mode = False
-
+        self.lines = {}
 
         try:
             self.rectangleSelected.connect(self.get_main_window().on_rectangle_selected)
@@ -225,81 +499,77 @@ class PDFGraphicsView(QGraphicsView):
             self.status_bar_message("Horizontal Line Mode Disabled.")
     
     def add_line(self, start_point, end_point, orientation=None):
-        """Add a straight line from start_point to end_point."""
+        """Add a straight line from start_point to end_point, extending from edge to edge."""
         try:
-            # Ensure the line is straight (horizontal or vertical)
-            if start_point.x() != end_point.x() and start_point.y() != end_point.y():
-                # Decide whether to make it horizontal or vertical based on larger delta
-                delta_x = abs(end_point.x() - start_point.x())
-                delta_y = abs(end_point.y() - start_point.y())
-                if delta_x > delta_y:
-                    end_point.setY(start_point.y())
+            # Determine orientation if not specified
+            if orientation is None:
+                if start_point.x() == end_point.x():
+                    orientation = 'vertical'
+                elif start_point.y() == end_point.y():
                     orientation = 'horizontal'
                 else:
-                    end_point.setX(start_point.x())
-                    orientation = 'vertical'
+                    delta_x = abs(end_point.x() - start_point.x())
+                    delta_y = abs(end_point.y() - start_point.y())
+                    orientation = 'horizontal' if delta_x > delta_y else 'vertical'
+
+            # Get the boundaries of the image
+            if self._pixmap_item:
+                pixmap_rect = self._pixmap_item.pixmap().rect()
+            else:
+                pixmap_rect = self.sceneRect()
+
+            if orientation == 'vertical':
+                x = start_point.x()
+                start_point = QPointF(x, pixmap_rect.top())
+                end_point = QPointF(x, pixmap_rect.bottom())
+            elif orientation == 'horizontal':
+                y = start_point.y()
+                start_point = QPointF(pixmap_rect.left(), y)
+                end_point = QPointF(pixmap_rect.right(), y)
 
             line = QLineF(start_point, end_point)
-            line_item = LineItem(line)  # Parent defaults to None
-            line_item.orientation = orientation  # Set orientation attribute
+            line_item = LineItem(line, orientation=orientation)
             self.scene().addItem(line_item)
             self._line_items.append(line_item)
 
             # Connect the moved signal
             line_item.moved.connect(lambda new_line, item=line_item: self.on_line_moved(item, new_line))
-
+            
             # Create and push AddLineAction to undo stack
-            action = AddLineAction(self, line_item)
-            self.undo_stack.append(action)
-            self.redo_stack.clear()  # Clear redo stack on new action
-
-            self.lineModified.emit()
-
-            self.logger.info(f"Line added from {start_point} to {end_point}, Orientation: {orientation}")
+            main_window = self.get_main_window()
+            if main_window:
+                action = AddLineAction(main_window, line_item)
+                self.undo_stack.append(action)
+                self.redo_stack.clear()
+                self.lineModified.emit()
+                self.logger.info(f"Line added from {start_point} to {end_point}, Orientation: {orientation}")
+            else:
+                self.logger.error("Main window instance not found. Cannot add line.")
         except Exception as e:
             self.logger.error(f"Error adding line: {e}", exc_info=True)
             self.get_main_window().show_error_message(f"Failed to add line: {e}")
 
-    def on_line_moved(self, line_item, new_line):
-        """Handle the movement of a line item."""
-        try:
-            # Capture the previous line position
-            previous_line = line_item._previous_line
-
-            # Create MoveLineAction
-            action = MoveLineAction(self, line_item, previous_line, new_line)
-            self.undo_stack.append(action)
-            self.redo_stack.clear()
-            self.lineModified.emit()
-            self.logger.info(f"Line moved from {previous_line} to {new_line}")
-
-            # Update the lines dictionary
-            key = f"{self.current_page_index}_full"
-            if key in self.lines:
-                try:
-                    self.lines[key].remove(previous_line)
-                    self.lines[key].append(new_line)
-                except ValueError:
-                    self.logger.warning(f"Line {previous_line} not found in lines[{key}].")
-        except Exception as e:
-            self.logger.error(f"Error handling line movement: {e}", exc_info=True)
-            self.get_main_window().show_error_message(f"Failed to move line: {e}")
-
+    
     def remove_line(self, line_item):
         """Remove a specified line_item."""
         try:
             if line_item in self._line_items:
-                self.scene().removeItem(line_item)
-                self._line_items.remove(line_item)
+                main_window = self.get_main_window()
+                if main_window:
+                    self.scene().removeItem(line_item)
+                    self._line_items.remove(line_item)
 
-                # Create and push RemoveLineAction to undo stack
-                action = RemoveLineAction(self, line_item)
-                self.undo_stack.append(action)
-                self.redo_stack.clear()  # Clear redo stack on new action
+                    # Create and push RemoveLineAction to undo stack
+                    action = RemoveLineAction(main_window, line_item)
+                    self.undo_stack.append(action)
+                    self.redo_stack.clear()  # Clear redo stack on new action
 
-                self.lineModified.emit()
+                    self.lineModified.emit()
 
-                self.logger.info("Line removed.")
+                    self.logger.info("Line removed.")
+                else:
+                    self.logger.error("Main window instance not found. Cannot remove line.")
+                    self.get_main_window().show_error_message("Internal Error: Main window not found.")
             else:
                 self.logger.warning("Attempted to remove a non-existent line.")
         except Exception as e:
@@ -406,46 +676,32 @@ class PDFGraphicsView(QGraphicsView):
             self.logger.info("Image loaded into PDFGraphicsView successfully.")
         except Exception as e:
             self.logger.error(f"Error loading image into scene: {e}", exc_info=True)
-            self.show_error_message(f"An error occurred while loading image: {e}")
+            self.get_main_window().show_error_message(f"An error occurred while loading image: {e}")
 
     def mousePressEvent(self, event):
         try:
             if event.button() == Qt.LeftButton:
-                if self.manual_table_detection_mode:
-                    modifiers = QApplication.keyboardModifiers()
-                    if modifiers == Qt.ControlModifier:
-                        # Add a rectangle
-                        self.add_rectangle_at_position(event.pos())
-                    elif modifiers == Qt.ShiftModifier:
-                        # Start adding a line
-                        self._start_pos = self.mapToScene(event.pos())
-                        self._current_line_orientation = None  # To determine orientation on mouse release
-                    else:
-                        # Default action or do nothing
-                        pass
-                elif self.adding_vertical_line or self.adding_horizontal_line:
-                    # Determine orientation based on the mode
-                    click_pos = self.mapToScene(event.pos())
-                    if self.adding_vertical_line:
-                        x = click_pos.x()
-                        if hasattr(self, '_pixmap_item'):
-                            image_rect = self._pixmap_item.boundingRect()
-                            start_point = QPointF(x, image_rect.top())
-                            end_point = QPointF(x, image_rect.bottom())
-                            self.add_line(start_point, end_point, orientation='vertical')
-                            # Disable the mode after adding the line
-                            self.adding_vertical_line = False
-                            self.get_main_window().add_vertical_line_action.setChecked(False)
-                    elif self.adding_horizontal_line:
-                        y = click_pos.y()
-                        if hasattr(self, '_pixmap_item'):
-                            image_rect = self._pixmap_item.boundingRect()
-                            start_point = QPointF(image_rect.left(), y)
-                            end_point = QPointF(image_rect.right(), y)
-                            self.add_line(start_point, end_point, orientation='horizontal')
-                            # Disable the mode after adding the line
-                            self.adding_horizontal_line = False
-                            self.get_main_window().add_horizontal_line_action.setChecked(False)
+                scene_pos = self.mapToScene(event.pos())
+                if self.adding_vertical_line or self.adding_horizontal_line:
+                    # Start drawing line
+                    self._start_pos = scene_pos
+                    self._temp_line = QGraphicsLineItem()
+                    self._temp_line.setPen(QPen(QColor(0, 0, 255), 1, Qt.DashLine))
+                    self.scene().addItem(self._temp_line)
+                elif self.manual_table_detection_mode:
+                    self.modifiers = QApplication.keyboardModifiers()
+                    if self.modifiers == Qt.ControlModifier:
+                        # Start drawing rectangle
+                        self._start_pos = scene_pos
+                        self._temp_rect_item = QGraphicsRectItem()
+                        self._temp_rect_item.setPen(QPen(QColor(255, 0, 0), 1, Qt.DashLine))
+                        self.scene().addItem(self._temp_rect_item)
+                    elif self.modifiers == Qt.ShiftModifier:
+                        # Start drawing line with modifiers
+                        self._start_pos = scene_pos
+                        self._temp_line = QGraphicsLineItem()
+                        self._temp_line.setPen(QPen(QColor(0, 0, 255), 1, Qt.DashLine))
+                        self.scene().addItem(self._temp_line)
                 else:
                     super().mousePressEvent(event)
             else:
@@ -456,25 +712,21 @@ class PDFGraphicsView(QGraphicsView):
 
     def mouseMoveEvent(self, event):
         try:
-            if self.manual_table_detection_mode and hasattr(self, '_start_pos') and self._start_pos:
+            if hasattr(self, '_start_pos') and self._start_pos:
                 current_pos = self.mapToScene(event.pos())
-                if not hasattr(self, '_temp_line'):
-                    self._temp_line = QGraphicsLineItem(QLineF(self._start_pos, current_pos))
-                    pen = QPen(QColor(0, 0, 255), 2, Qt.DashLine)
-                    self._temp_line.setPen(pen)
-                    self.scene().addItem(self._temp_line)
-                else:
-                    new_line = QLineF(self._start_pos, current_pos)
-                    # Determine orientation
-                    if abs(new_line.dx()) > abs(new_line.dy()):
-                        # Horizontal line
-                        new_line.setP2(QPointF(new_line.p2().x(), new_line.p1().y()))
-                        self._current_line_orientation = 'horizontal'
+                if hasattr(self, '_temp_line') and self._temp_line:
+                    if self.adding_vertical_line:
+                        # Vertical line: x remains constant
+                        line = QLineF(self._start_pos.x(), self._start_pos.y(), self._start_pos.x(), current_pos.y())
+                    elif self.adding_horizontal_line:
+                        # Horizontal line: y remains constant
+                        line = QLineF(self._start_pos.x(), self._start_pos.y(), current_pos.x(), self._start_pos.y())
                     else:
-                        # Vertical line
-                        new_line.setP2(QPointF(new_line.p1().x(), new_line.p2().y()))
-                        self._current_line_orientation = 'vertical'
-                    self._temp_line.setLine(new_line)
+                        line = QLineF(self._start_pos, current_pos)
+                    self._temp_line.setLine(line)
+                elif hasattr(self, '_temp_rect_item') and self._temp_rect_item:
+                    rect = QRectF(self._start_pos, current_pos).normalized()
+                    self._temp_rect_item.setRect(rect)
             else:
                 super().mouseMoveEvent(event)
         except Exception as e:
@@ -484,50 +736,45 @@ class PDFGraphicsView(QGraphicsView):
     def mouseReleaseEvent(self, event):
         try:
             if event.button() == Qt.LeftButton:
-                if self.manual_table_detection_mode:
-                    modifiers = QApplication.keyboardModifiers()
-                    if modifiers == Qt.ControlModifier and hasattr(self, '_temp_rect_item') and self._temp_rect_item:
-                        # Finalize rectangle addition
-                        final_rect = self._temp_rect_item.rect()
-                        self.scene().removeItem(self._temp_rect_item)
-                        del self._temp_rect_item
-                        rect_item = RectItem(final_rect)
-                        self.scene().addItem(rect_item)
-                        self._rect_items.append(rect_item)
-                        rect_item.moved.connect(lambda new_rect, item=rect_item: self.on_rect_moved(item, new_rect))
-                        # Push to undo stack
-                        action = AddRectangleAction(self, rect_item)
-                        self.undo_stack.append(action)
-                        self.redo_stack.clear()
-                        self.lineModified.emit()
-                        self.logger.info(f"Rectangle added: {final_rect}")
-                    elif modifiers == Qt.ShiftModifier and hasattr(self, '_temp_line') and self._temp_line:
-                        # Finalize line addition
-                        final_line = self._temp_line.line()
-                        orientation = self._current_line_orientation
-                        self.scene().removeItem(self._temp_line)
-                        del self._temp_line
-                        del self._current_line_orientation
-                        line_item = LineItem(final_line)
-                        self.scene().addItem(line_item)
-                        self._line_items.append(line_item)
-                        line_item.moved.connect(lambda new_line, item=line_item: self.on_line_moved(item, new_line))
-                        # Push to undo stack
-                        action = AddLineAction(self, line_item)
-                        self.undo_stack.append(action)
-                        self.redo_stack.clear()
-                        self.lineModified.emit()
-                        self.logger.info(f"Line added: {final_line}, Orientation: {orientation}")
-                elif self.adding_vertical_line or self.adding_horizontal_line:
-                    # Already handled in mousePressEvent
-                    pass
+                if hasattr(self, '_temp_line') and self._temp_line:
+                    # Finalize line
+                    line = self._temp_line.line()
+                    self.scene().removeItem(self._temp_line)
+                    del self._temp_line
+
+                    orientation = None
+                    if self.adding_vertical_line:
+                        orientation = 'vertical'
+                    elif self.adding_horizontal_line:
+                        orientation = 'horizontal'
+                    elif self.manual_table_detection_mode and hasattr(self, 'modifiers') and self.modifiers == Qt.ShiftModifier:
+                        delta_x = abs(line.p2().x() - line.p1().x())
+                        delta_y = abs(line.p2().y() - line.p1().y())
+                        orientation = 'horizontal' if delta_x > delta_y else 'vertical'
+
+                    self.add_line(line.p1(), line.p2(), orientation)
+                    # Reset flags if not in manual table detection mode
+                    if not self.manual_table_detection_mode:
+                        self.adding_vertical_line = False
+                        self.adding_horizontal_line = False
+                        # Uncheck the toolbar buttons
+                        self.get_main_window().add_vertical_line_action.setChecked(False)
+                        self.get_main_window().add_horizontal_line_action.setChecked(False)
+                elif hasattr(self, '_temp_rect_item') and self._temp_rect_item:
+                    # Finalize rectangle
+                    rect = self._temp_rect_item.rect()
+                    self.scene().removeItem(self._temp_rect_item)
+                    del self._temp_rect_item
+                    self.add_rectangle(rect)
                 else:
                     super().mouseReleaseEvent(event)
+                self._start_pos = None
+                self.modifiers = None  # Reset modifiers
             else:
                 super().mouseReleaseEvent(event)
         except Exception as e:
             self.logger.error(f"Error in mouseReleaseEvent: {e}", exc_info=True)
-            super().mouseReleaseEvent(event)
+            self.get_main_window().show_error_message(f"An error occurred: {e}")
 
     def wheelEvent(self, event):
         try:
@@ -579,7 +826,7 @@ class PDFGraphicsView(QGraphicsView):
                 for item in selected_items:
                     if isinstance(item, QGraphicsRectItem):
                         self.remove_rectangle(item)
-                    elif isinstance(item, QGraphicsLineItem):
+                    elif isinstance(item, LineItem):
                         self.remove_line(item)
             elif event.key() == Qt.Key_Z and event.modifiers() & Qt.ControlModifier:
                 self.undo_last_action()
@@ -594,22 +841,6 @@ class PDFGraphicsView(QGraphicsView):
         except Exception as e:
             self.logger.error(f"Error in keyPressEvent: {e}")
             self.get_main_window().show_error_message(f"An error occurred: {e}")
-
-    def add_line_via_ui(self):
-        """Method to add a straight horizontal or vertical line via UI action."""
-        # For example, add a horizontal line spanning the width of the image
-        pixmap_item = getattr(self, '_pixmap_item', None)
-        if pixmap_item:
-            scene_rect = pixmap_item.boundingRect()
-            # Example: Add a horizontal line at the center
-            start_point = scene_rect.topLeft()
-            end_point = scene_rect.topRight()
-            midpoint_y = scene_rect.height() / 2
-            start_point.setY(midpoint_y)
-            end_point.setY(midpoint_y)
-            self.add_line(start_point, end_point)
-        else:
-            self.logger.warning("No image loaded to add a line.")
 
     def undo_last_action(self):
         """Undo the last action."""
@@ -657,14 +888,18 @@ class PDFGraphicsView(QGraphicsView):
     def display_lines(self, lines, key=None):
         """Display detected table lines on the image."""
         try:
-            pen = QPen(QColor(0, 255, 0), 2)  # Green lines for tables
+            if not hasattr(self, '_pixmap_item') or not self._pixmap_item:
+                raise RuntimeError("No image loaded in PDFGraphicsView to display lines on.")
+
+            pen = QPen(QColor(0, 255, 0), 1)  # Green lines, 1 pixel wide
             key = key or f"{self.current_page_index}_full"
+            self.logger.debug(f"Displaying lines for key '{key}' with {len(lines)} lines.")
 
             # Clear existing lines for the key
             existing_lines = self.lines.get(key, [])
             for line in existing_lines:
-                for item in self._line_items:
-                    if item.line() == line:
+                for item in self._line_items.copy():  # Use copy to avoid modification during iteration
+                    if item.line == line:
                         self.scene().removeItem(item)
                         self._line_items.remove(item)
                         break
@@ -673,7 +908,9 @@ class PDFGraphicsView(QGraphicsView):
             self.lines[key] = lines
             for line in lines:
                 line_item = LineItem(line)
-                line_item.setPen(pen)
+                line_item.setPen(pen)  # Use the setPen method
+                orientation = 'horizontal' if line.p1().y() == line.p2().y() else 'vertical'
+                line_item.orientation = orientation  # Set the orientation
                 self.scene().addItem(line_item)
                 self._line_items.append(line_item)
 
@@ -683,10 +920,10 @@ class PDFGraphicsView(QGraphicsView):
             self.logger.info(f"Displayed {len(lines)} table lines for key '{key}'.")
         except Exception as e:
             self.logger.error(f"Error displaying table lines: {e}", exc_info=True)
-            self.show_error_message(f"Failed to display table lines: {e}")
+            self.get_main_window().show_error_message(f"Failed to display table lines: {e}")
 
     def get_lines(self):
-        return [item.line() for item in self._line_items]
+        return [item.line for item in self._line_items]
 
     def clear_lines(self):
         """Clear all the lines from the scene."""
@@ -706,22 +943,13 @@ class PDFGraphicsView(QGraphicsView):
                         return
         event.ignore()
 
-
     def dropEvent(self, event):
         try:
             if event.mimeData().hasUrls():
-                urls = event.mimeData().urls()
-                for url in urls:
+                for url in event.mimeData().urls():
                     if url.isLocalFile():
                         file_path = url.toLocalFile()
-                        
-                        # Log the dropped file
-                        self.get_main_window().logger.debug(f"Dropped file: {file_path}")
-                        
-                        # First, try to guess the MIME type
                         mime_type, _ = mimetypes.guess_type(file_path)
-                        
-                        # If MIME type is None, fallback to checking the file extension
                         if not mime_type:
                             _, ext = os.path.splitext(file_path)
                             ext = ext.lower()
@@ -729,256 +957,14 @@ class PDFGraphicsView(QGraphicsView):
                                 mime_type = 'application/pdf'
                             elif ext in ['.png', '.jpg', '.jpeg']:
                                 mime_type = 'image/' + ext.lstrip('.')
-                        
-                        # Log the detected MIME type
-                        self.get_main_window().logger.debug(f"File: {file_path}, MIME type: {mime_type}")
-                        
-                        if mime_type == 'application/pdf':
-                            self.get_main_window().process_files([file_path])
-                            self.get_main_window().update_recent_files(file_path)
-                        elif mime_type in ['image/png', 'image/jpeg', 'image/jpg']:
+                        if mime_type == 'application/pdf' or mime_type.startswith('image/'):
                             self.get_main_window().process_files([file_path])
                             self.get_main_window().update_recent_files(file_path)
                         else:
                             self.get_main_window().show_error_message("Invalid file type. Only PDF or image files supported.")
-            else:
-                self.get_main_window().show_error_message("Invalid file(s). Please drop local files only.")
         except Exception as e:
             self.get_main_window().show_error_message(f"An error occurred while dropping files: {e}")
-            self.get_main_window().logger.error(f"Error in dropEvent: {e}")
-
-class Action:
-    """Base class for actions that can be undone/redone."""
-    def undo(self):
-        pass
-
-    def redo(self):
-        pass
-
-class AddLineAction:
-    """Represents an undoable action for adding a line."""
-    def __init__(self, app, line_item):
-        self.app = app
-        self.line_item = line_item
-
-    def undo(self):
-        self.app.scene.removeItem(self.line_item)
-        if self.app.current_image_index in self.app.lines:
-            self.app.lines[self.app.current_image_index].remove(self.line_item.line())
-
-    def redo(self):
-        self.app.scene.addItem(self.line_item)
-        if self.app.current_image_index not in self.app.lines:
-            self.app.lines[self.app.current_image_index] = []
-        self.app.lines[self.app.current_image_index].append(self.line_item.line())
-
-class AddRectangleAction(Action):
-    def __init__(self, view, rect_item):
-        self.view = view
-        self.rect_item = rect_item
-
-    def undo(self):
-        self.view.scene().removeItem(self.rect_item)
-        self.view._rect_items.remove(self.rect_item)
-
-    def redo(self):
-        self.view.scene().addItem(self.rect_item)
-        self.view._rect_items.append(self.rect_item)
-
-class RemoveLineAction(Action):
-    def __init__(self, view, line_item):
-        self.view = view
-        self.line_item = line_item
-
-    def undo(self):
-        self.view.scene().addItem(self.line_item)
-        self.view._line_items.append(self.line_item)
-        self.view.lineModified.emit()
-
-    def redo(self):
-        self.view.scene().removeItem(self.line_item)
-        self.view._line_items.remove(self.line_item)
-        self.view.lineModified.emit()
-
-class RemoveRectangleAction(Action):
-    def __init__(self, view, rect_item):
-        self.view = view
-        self.rect_item = rect_item
-
-    def undo(self):
-        self.view.scene().addItem(self.rect_item)
-        self.view._rect_items.append(self.rect_item)
-
-    def redo(self):
-        self.view.scene().removeItem(self.rect_item)
-        self.view._rect_items.remove(self.rect_item)
-
-class MoveRectangleAction(QUndoCommand):
-    def __init__(self, app, rect_item, old_rect, new_rect):
-        super().__init__("Move Rectangle")
-        self.app = app
-        self.rect_item = rect_item
-        self.old_rect = old_rect
-        self.new_rect = new_rect
-
-    def undo(self):
-        self.rect_item.setRect(self.old_rect)
-        self.app.logger.info(f"Undo move: Rectangle reverted to {self.old_rect}")
-        self.app.lineModified.emit()
-
-    def redo(self):
-        self.rect_item.setRect(self.new_rect)
-        self.app.logger.info(f"Redo move: Rectangle moved to {self.new_rect}")
-        self.app.lineModified.emit()
-
-class MoveLineAction:
-    """Represents an undoable action for moving a line."""
-    def __init__(self, app, line_item, old_line, new_line):
-        self.app = app
-        self.line_item = line_item
-        self.old_line = old_line
-        self.new_line = new_line
-
-    def undo(self):
-        self.line_item.setLine(self.old_line)
-        if self.app.current_image_index in self.app.lines:
-            try:
-                self.app.lines[self.app.current_image_index].remove(self.new_line)
-                self.app.lines[self.app.current_image_index].append(self.old_line)
-            except ValueError:
-                pass
-
-    def redo(self):
-        self.line_item.setLine(self.new_line)
-        if self.app.current_image_index in self.app.lines:
-            try:
-                self.app.lines[self.app.current_image_index].remove(self.old_line)
-                self.app.lines[self.app.current_image_index].append(self.new_line)
-            except ValueError:
-                pass
-
-class RectItem(QGraphicsObject):
-    moved = pyqtSignal(QRectF)  # Define a signal for when the rectangle is moved
-
-    def __init__(self, rect, parent=None):
-        super().__init__(parent)
-        self.setFlags(
-            QGraphicsObject.ItemIsSelectable |
-            QGraphicsObject.ItemIsMovable |
-            QGraphicsObject.ItemSendsGeometryChanges
-        )
-        self.setPen(QPen(QColor(255, 0, 0), 2))
-        self.rect = rect
-        self._previous_rect = QRectF(rect)
-
-    def boundingRect(self):
-        return self.rect.normalized()
-
-    def paint(self, painter, option, widget=None):
-        painter.setPen(self.pen())
-        painter.drawRect(self.rect)
-
-    def mouseMoveEvent(self, event):
-        super().mouseMoveEvent(event)
-        # Optionally, enforce constraints on movement
-
-    def mouseReleaseEvent(self, event):
-        super().mouseReleaseEvent(event)
-        new_rect = self.rect
-        if new_rect != self._previous_rect:
-            self.moved.emit(new_rect)
-            self._previous_rect = new_rect
-
-class AddCroppedImageAction(QUndoCommand):
-    def __init__(self, app, cropped_image_path, page_index, cropped_index, rect_item):
-        super().__init__("Add Cropped Image")
-        self.app = app
-        self.cropped_image_path = cropped_image_path
-        self.page_index = page_index
-        self.cropped_index = cropped_index
-        self.rect_item = rect_item
-
-    def undo(self):
-        try:
-            # Remove the cropped image from internal structures
-            self.app.cropped_images[self.page_index].remove(self.cropped_image_path)
-            
-            # Remove from project list
-            parent_item = self.app.project_list.topLevelItem(self.page_index)
-            for i in range(parent_item.childCount()):
-                child = parent_item.child(i)
-                if child.text(0).endswith(os.path.basename(self.cropped_image_path)):
-                    parent_item.removeChild(child)
-                    break
-
-            # Remove the rectangle from the scene
-            self.app.graphics_view.scene().removeItem(self.rect_item)
-            
-            self.app.logger.info(f"Undo: Removed cropped image {self.cropped_image_path} and corresponding rectangle.")
-        except Exception as e:
-            self.app.logger.error(f"Error undoing cropped image: {e}", exc_info=True)
-
-    def redo(self):
-        try:
-            # Re-add the cropped image to internal structures
-            self.app.cropped_images[self.page_index].append(self.cropped_image_path)
-            
-            # Re-add to project list
-            parent_item = self.app.project_list.topLevelItem(self.page_index)
-            cropped_item_text = f"Cropped {self.cropped_index}: {os.path.basename(self.cropped_image_path)}"
-            cropped_item = QTreeWidgetItem(parent_item)
-            cropped_item.setText(0, cropped_item_text)
-            cropped_item.setFlags(cropped_item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-            parent_item.addChild(cropped_item)
-            parent_item.setExpanded(True)
-
-            # Re-add the rectangle to the scene
-            self.app.graphics_view.scene().addItem(self.rect_item)
-            
-            self.app.logger.info(f"Redo: Re-added cropped image {self.cropped_image_path} and corresponding rectangle.")
-        except Exception as e:
-            self.app.logger.error(f"Error redoing cropped image: {e}", exc_info=True)
-
-class OcrGui(QObject):
-    ocr_progress = pyqtSignal(int, int)
-    ocr_completed = pyqtSignal(tuple)
-    ocr_error = pyqtSignal(str)
-
-class OCRWorker(QThread):
-    ocr_progress = pyqtSignal(int, int)
-    ocr_completed = pyqtSignal(object)
-    ocr_error = pyqtSignal(str)
-
-    def __init__(self, pdf_file, storedir, output_csv, ocr_cancel_event):
-        super().__init__()
-        self.pdf_file = pdf_file
-        self.storedir = storedir
-        self.output_csv = output_csv
-        self.ocr_cancel_event = ocr_cancel_event
-
-    def run(self):
-        try:
-            # Run OCR processing here
-            results = run_ocr_pipeline(
-                self.pdf_file,
-                self.storedir,
-                self.output_csv,
-                self.ocr_progress,
-                self.ocr_cancel_event
-            )
-            # Emit completion signal with results
-            self.ocr_completed.emit(results)
-        except Exception as e:
-            # Capture the exception traceback
-            tb = traceback.format_exc()
-            self.logger.error(f"Error in OCRWorker: {e}\n{tb}")
-            # Emit error signal with the exception message
-            self.ocr_error.emit(str(e))
-
-    def cancel(self):
-        """Method to cancel the OCR process."""
-        self.ocr_cancel_event.set()
-        self.logger.info("OCR cancellation requested.")
+            self.logger.error(f"Error in dropEvent: {e}", exc_info=True)
 
 class OCRApp(QMainWindow):
     ocr_completed = pyqtSignal(object)
@@ -1243,13 +1229,13 @@ class OCRApp(QMainWindow):
         # Add Vertical Line Action
         self.add_vertical_line_action = QAction('Add Vertical Line', self)
         self.add_vertical_line_action.setCheckable(True)
-        self.add_vertical_line_action.triggered.connect(self.graphics_view.toggle_add_vertical_line_mode)
+        self.add_vertical_line_action.triggered.connect(lambda checked: self.graphics_view.toggle_add_vertical_line_mode(checked))
         tool_bar.addAction(self.add_vertical_line_action)
 
         # Add Horizontal Line Action
         self.add_horizontal_line_action = QAction('Add Horizontal Line', self)
         self.add_horizontal_line_action.setCheckable(True)
-        self.add_horizontal_line_action.triggered.connect(self.graphics_view.toggle_add_horizontal_line_mode)
+        self.add_horizontal_line_action.triggered.connect(lambda checked: self.graphics_view.toggle_add_horizontal_line_mode(checked))
         tool_bar.addAction(self.add_horizontal_line_action)
 
         # Group the line actions to make them exclusive
@@ -1493,8 +1479,8 @@ class OCRApp(QMainWindow):
                 key = f"{page_index}_full"
             self.lines[key] = lines
 
-            # Display lines on the image in the preview
-            self.graphics_view.display_lines(lines)
+            # Display lines on the image in the preview with the correct key
+            self.graphics_view.display_lines(lines, key=key)  # Pass the key here
 
             self.logger.info(f"Table detection completed for {'cropped image' if cropped_index is not None else 'page/image'} {page_index + 1}")
 
@@ -1560,9 +1546,9 @@ class OCRApp(QMainWindow):
             bounding_boxes = []
 
             for v_line in vertical_lines:
-                v_x = v_line.line().p1().x()
+                v_x = v_line.line.p1().x()  # Access 'line' as an attribute, not a method
                 for h_line in horizontal_lines:
-                    h_y = h_line.line().p1().y()
+                    h_y = h_line.line.p1().y()  # Access 'line' as an attribute, not a method
                     bounding_boxes.append(QRectF(v_x, h_y, 1, 1))  # Tiny rectangles at intersections
 
             self.bounding_boxes = bounding_boxes
@@ -1708,6 +1694,34 @@ class OCRApp(QMainWindow):
         except Exception as e:
             self.show_error_message(f"Failed to load image '{file_path}': {e}")
             self.logger.error(f"Failed to load image '{file_path}': {e}", exc_info=True)
+
+    def on_line_moved(self, line_item, new_line):
+        """Handle the movement of a line item."""
+        try:
+            # Capture the previous line position before the move
+            previous_line = line_item.line  # Access the stored line
+
+            # Create MoveLineAction
+            action = MoveLineAction(self, line_item, previous_line, new_line)
+            self.graphics_view.undo_stack.append(action)
+            self.graphics_view.redo_stack.clear()
+            self.graphics_view.lineModified.emit()
+            self.logger.info(f"Line moved from {previous_line} to {new_line}")
+
+            # Update the lines dictionary
+            key = f"{self.graphics_view.current_page_index}_full"
+            if key in self.lines:
+                try:
+                    self.lines[key].remove(previous_line)
+                    self.lines[key].append(new_line)
+                except ValueError:
+                    self.logger.warning(f"Line {previous_line} not found in lines[{key}].")
+        except AttributeError:
+            self.logger.error(f"LineItem does not have 'line' attribute.", exc_info=True)
+            self.show_error_message("Failed to move line: Internal error.")
+        except Exception as e:
+            self.logger.error(f"Error handling line movement: {e}", exc_info=True)
+            self.show_error_message(f"Failed to move line: {e}")
 
     def save_as(self):
         # Implement Save As functionality here
@@ -1866,7 +1880,7 @@ class OCRApp(QMainWindow):
             self.qimages.clear()
             self.image_file_paths.clear()
             self.rectangles.clear()
-            self.scene.clear()
+            #self.scene.clear()
             self.project_list.clear()
             self.current_page_index = 0
             self.logger.info("Cleared current project data.")
@@ -2000,10 +2014,6 @@ class OCRApp(QMainWindow):
             key = f"{self.current_page_index}_full"
             page_lines = self.lines.get(key, [])
             self.graphics_view.display_lines(page_lines, key=key)
-
-            # Automatically trigger table detection for the first page
-            if self.current_page_index == 0:
-                self.detect_tables()
 
         except Exception as e:
             self.logger.error(f"Failed to display page {self.current_page_index}: {e}", exc_info=True)
@@ -2557,6 +2567,9 @@ def main():
     logger = logging.getLogger(__name__)
     logger.info("Application started.")
 
+    # Set up the global exception hook
+    sys.excepthook = exception_hook
+
     # Initialize the QApplication
     app = QApplication(sys.argv)
 
@@ -2609,7 +2622,6 @@ def main():
             f"An unexpected error occurred during execution:\n{e}"
         )
         sys.exit(1)
-
 
 if __name__ == '__main__':
     main()
