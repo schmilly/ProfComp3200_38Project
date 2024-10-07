@@ -122,16 +122,18 @@ def process_image(filename, ocr, reader):
     
     return (row_index, col_index, best_text, best_confidence, source, filename)
 
-def convert_pdf_to_images(pdf_file_path, output_dir):
+def convert_pdf_to_images(pdf_file_path, output_dir, dpi=400):
     """Converts PDF to images and saves them to output_dir."""
+    images = pdf_to_image.pdf_to_images(pdf_file_path, dpi=dpi)
     image_list = []
     counter = 0
-    for i in pdf_to_image.pdf_to_images(pdf_file_path):
+    for image in images:
         name = os.path.join(output_dir, f"Document_{counter}.png")
-        i.save(name)
-        image_list.append(os.path.join(str(Path.cwd()), name))
+        image.save(name)
+        image_list.append(os.path.abspath(name))
         counter += 1
     return image_list
+
 
 def detect_tables_in_images(image_list):
     """Detects tables in images and returns a TableMap."""
@@ -261,7 +263,7 @@ def main():
         raise FileNotFoundError(f"PDF file not found: {pdf_file.resolve()}")
 
     # Convert PDF to images
-    image_list = convert_pdf_to_images(str(pdf_file), storedir)
+    image_list = convert_pdf_to_images(str(pdf_file), storedir, dpi=400)
 
     # Detect tables and cellularize
     TableMap = detect_tables_in_images(image_list)
