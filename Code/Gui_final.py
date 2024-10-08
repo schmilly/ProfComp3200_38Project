@@ -18,6 +18,7 @@ from PyPDF2 import PdfFileReader
 import PyPDF2
 import json
 import paddle
+from collections import deque
 
 # Third-party imports
 import cv2
@@ -100,11 +101,10 @@ class EmittingStream(QObject):
     def flush(self):
         pass
 
-
 class LineItem(QGraphicsObject):
-    moved = pyqtSignal(QLineF)  # Signal emitted when the line is moved
+    moved = pyqtSignal(QLineF, QLineF)  # Signal emitted when the line is moved (old_line, new_line)
 
-    def __init__(self, line, orientation='horizontal', parent=None):
+    def __init__(self, line, orientation='horizontal', image_filename=None, parent=None):
         super().__init__(parent)
         self.logger = logging.getLogger(__name__)  # Initialize the logger
         self.orientation = orientation  # 'horizontal' or 'vertical'
@@ -117,6 +117,8 @@ class LineItem(QGraphicsObject):
         )
         self.setAcceptHoverEvents(True)
         self.line = QLineF(line)  # Store the line as an attribute
+        self.previous_line = QLineF(line)  # Initialize previous_line with the initial line position
+        self.image_filename = image_filename  # Associate the line with an image
 
     def boundingRect(self):
         pen_width = self._pen.width()
@@ -146,7 +148,7 @@ class LineItem(QGraphicsObject):
                     self.line.p2().x(),
                     self.line.p2().y() + delta.y()
                 )
-                # Prevent horizontal movement
+                # Prevent horizontal movement by resetting the x position
                 new_pos.setX(self.pos().x())
             elif self.orientation == 'vertical':
                 new_line = QLineF(
@@ -155,7 +157,7 @@ class LineItem(QGraphicsObject):
                     self.line.p2().x() + delta.x(),
                     self.line.p2().y()
                 )
-                # Prevent vertical movement
+                # Prevent vertical movement by resetting the y position
                 new_pos.setY(self.pos().y())
             else:
                 new_line = QLineF(
@@ -164,8 +166,13 @@ class LineItem(QGraphicsObject):
                     self.line.p2().x() + delta.x(),
                     self.line.p2().y() + delta.y()
                 )
+            
+            # Emit the moved signal with old and new lines
+            self.moved.emit(QLineF(self.previous_line), QLineF(new_line))
+            
+            # Update the line and previous_line
             self.line = new_line
-            self.moved.emit(new_line)
+            self.previous_line = QLineF(new_line)
             self.update()
             return new_pos
         return super().itemChange(change, value)
@@ -381,11 +388,24 @@ class OcrGui(QObject):
     ocr_error = pyqtSignal(str)
 
 class OCRWorker(QThread):
+    # Updated signals to include remaining time (in seconds)
     ocr_progress = pyqtSignal(int, int)
+    ocr_time_estimate = pyqtSignal(float)  # New signal for remaining time
     ocr_completed = pyqtSignal(object)
     ocr_error = pyqtSignal(str)
 
-    def __init__(self, pdf_file, storedir, output_csv, ocr_cancel_event, ocr_engine, easyocr_engine):
+    def __init__(self, pdf_file, storedir, output_csv, ocr_cancel_event, ocr_engine, easyocr_engine, user_lines=None):
+        """
+        Initialize the OCRWorker.
+
+        :param pdf_file: Path to the PDF file.
+        :param storedir: Directory to store intermediate images.
+        :param output_csv: Path to the output CSV file.
+        :param ocr_cancel_event: Event to handle cancellation.
+        :param ocr_engine: OCR engine instance.
+        :param easyocr_engine: EasyOCR engine instance.
+        :param user_lines: Dictionary mapping image filenames to lists of tuples (QLineF, orientation).
+        """
         super().__init__()
         self.pdf_file = pdf_file
         self.storedir = storedir
@@ -393,12 +413,19 @@ class OCRWorker(QThread):
         self.ocr_cancel_event = ocr_cancel_event
         self.ocr_engine = ocr_engine
         self.easyocr_engine = easyocr_engine
+        self.user_lines = user_lines if user_lines else {}  # Initialize user_lines
         self.logger = logging.getLogger(self.__class__.__name__)
+
+        # Initialize timing variables
+        self.total_start_time = None
+        self.cell_times = deque(maxlen=5)  # To store last 5 cell processing times
 
     def run(self):
         try:
             self.logger.info("OCR process started.")
-            
+
+            self.total_start_time = time.time()  # Start total OCR timer
+
             # Validate PDF file path
             if not self.pdf_file or not os.path.exists(self.pdf_file):
                 raise ValueError("Invalid or missing PDF file path.")
@@ -423,14 +450,44 @@ class OCRWorker(QThread):
 
             # Detect tables and cellularize
             self.logger.info("Detecting tables in images.")
-            TableMap = ocr_module.detect_tables_in_images(image_list)
+            auto_TableMap = ocr_module.detect_tables_in_images(image_list)
 
             if self.ocr_cancel_event.is_set():
                 self.logger.info("OCR process cancelled after table detection.")
                 return
 
-            self.logger.info("Cellularizing images based on table detection.")
-            locationlists = ocr_module.cellularize_images(image_list, TableMap)
+            # Ensure auto_TableMap is a list and has the same length as image_list
+            if isinstance(auto_TableMap, list):
+                if len(auto_TableMap) != len(image_list):
+                    raise ValueError("Mismatch between number of images and detected table maps.")
+                self.logger.debug("auto_TableMap is a list with correct length.")
+            elif isinstance(auto_TableMap, dict):
+                # If auto_TableMap is a dict, convert it to a list maintaining order
+                auto_TableMap = [auto_TableMap.get(image, [[], []]) for image in image_list]
+                self.logger.debug("Converted auto_TableMap from dict to list.")
+            else:
+                raise TypeError("detect_tables_in_images must return a list or dictionary.")
+
+            # Incorporate user-added lines into table detection
+            self.logger.info("Incorporating user-added lines into table detection.")
+            combined_TableMap = self._merge_user_lines(auto_TableMap, image_list)
+
+            if self.ocr_cancel_event.is_set():
+                self.logger.info("OCR process cancelled after merging user lines.")
+                return
+
+            # Validate combined_TableMap structure
+            for idx, Table in enumerate(combined_TableMap):
+                if not isinstance(Table, list) or len(Table) != 2:
+                    raise ValueError(f"Invalid table structure for image {image_list[idx]} at index {idx}.")
+                columns, rows = Table
+                if not isinstance(columns, list) or not isinstance(rows, list):
+                    raise ValueError(f"Columns and rows must be lists for image {image_list[idx]} at index {idx}.")
+                if len(columns) < 2 or len(rows) < 2:
+                    raise ValueError(f"Insufficient number of columns or rows for image {image_list[idx]} at index {idx}.")
+
+            self.logger.info("Cellularizing images based on combined table detection.")
+            locationlists = ocr_module.cellularize_images(image_list, combined_TableMap)
 
             if self.ocr_cancel_event.is_set():
                 self.logger.info("OCR process cancelled after cellularizing images.")
@@ -451,9 +508,33 @@ class OCRWorker(QThread):
                 if self.ocr_cancel_event.is_set():
                     self.logger.info("OCR process cancelled during image processing.")
                     return
+
+                cell_start_time = time.time()  # Start timer for individual cell
+
                 result = ocr_module.process_image(filename, self.ocr_engine, self.easyocr_engine)
-                results.append(result)
+                if result is not None:
+                    results.append(result)
+
+                cell_end_time = time.time()
+                cell_duration = cell_end_time - cell_start_time
+                self.cell_times.append(cell_duration)
+                self.logger.debug(f"Processed {filename} in {cell_duration:.2f} seconds.")
+
+                # Calculate running average of last 5 cell processing times
+                if len(self.cell_times) == 0:
+                    average_time = 0
+                else:
+                    average_time = sum(self.cell_times) / len(self.cell_times)
+
+                # Estimate remaining time
+                remaining_images = total_images - idx
+                remaining_time = remaining_images * average_time
+
+                # Emit progress and remaining time
                 self.ocr_progress.emit(idx, total_images)
+                self.ocr_time_estimate.emit(remaining_time)
+
+                #self.logger.debug(f"Progress: {idx}/{total_images}, Estimated remaining time: {remaining_time:.2f} seconds.")
 
             if self.ocr_cancel_event.is_set():
                 self.logger.info("OCR process cancelled after image processing.")
@@ -471,9 +552,42 @@ class OCRWorker(QThread):
             self.ocr_completed.emit((table_data, total, bad, easyocr_count, paddleocr_count, low_confidence_results))
             self.logger.info("OCR process completed successfully.")
 
+            # Log total processing time
+            total_end_time = time.time()
+            total_duration = total_end_time - self.total_start_time
+            self.logger.info(f"Total OCR processing time: {total_duration:.2f} seconds.")
+
         except Exception as e:
             self.logger.error(f"OCR process failed: {e}", exc_info=True)
             self.ocr_error.emit(f"Critical error: {e}")
+
+    def _merge_user_lines(self, auto_TableMap, image_list):
+        """
+        Merge user-added lines with auto-detected TableMap.
+
+        :param auto_TableMap: List of [columns, rows] per image.
+        :param image_list: List of image filenames.
+        :return: Combined TableMap with user lines.
+        """
+        combined_TableMap = []
+
+        for idx, image in enumerate(image_list):
+            auto_columns, auto_rows = auto_TableMap[idx]
+            user_lines = self.user_lines.get(image, [])
+
+            # Separate user lines based on orientation
+            user_columns = [line for line, orientation in user_lines if orientation == 'vertical']
+            user_rows = [line for line, orientation in user_lines if orientation == 'horizontal']
+
+            # Combine auto-detected and user-added lines
+            combined_columns = auto_columns + user_columns
+            combined_rows = auto_rows + user_rows
+
+            combined_TableMap.append([combined_columns, combined_rows])
+
+            self.logger.debug(f"Merged {len(user_columns)} user columns and {len(user_rows)} user rows with {len(auto_columns)} auto columns and {len(auto_rows)} auto rows for image {image}.")
+
+        return combined_TableMap
 
     def cancel(self):
         """Method to cancel the OCR process."""
@@ -560,7 +674,13 @@ class PDFGraphicsView(QGraphicsView):
             self.status_bar_message("Horizontal Line Mode Disabled.")
     
     def add_line(self, start_point, end_point, orientation=None):
-        """Add a straight line from start_point to end_point, extending from edge to edge."""
+        """
+        Add a straight line from start_point to end_point, extending from edge to edge.
+        
+        :param start_point: QPointF indicating the start of the line.
+        :param end_point: QPointF indicating the end of the line.
+        :param orientation: 'horizontal' or 'vertical'. If None, determined automatically.
+        """
         try:
             # Determine orientation if not specified
             if orientation is None:
@@ -579,6 +699,7 @@ class PDFGraphicsView(QGraphicsView):
             else:
                 pixmap_rect = self.sceneRect()
 
+            # Extend the line to edge based on orientation
             if orientation == 'vertical':
                 x = start_point.x()
                 start_point = QPointF(x, pixmap_rect.top())
@@ -588,17 +709,21 @@ class PDFGraphicsView(QGraphicsView):
                 start_point = QPointF(pixmap_rect.left(), y)
                 end_point = QPointF(pixmap_rect.right(), y)
 
+            # Create the QLineF object
             line = QLineF(start_point, end_point)
+
+            # Create a LineItem (assumes LineItem is a subclass of QGraphicsLineItem with a 'moved' signal)
             line_item = LineItem(line, orientation=orientation)
             self.scene().addItem(line_item)
             self._line_items.append(line_item)
 
-            # Connect the moved signal
+            # Connect the moved signal to handle line movements
             line_item.moved.connect(lambda new_line, item=line_item: self.on_line_moved(item, new_line))
-            
-            # Create and push AddLineAction to undo stack
+
+            # Retrieve the main window instance
             main_window = self.get_main_window()
             if main_window:
+                # Create and push AddLineAction to undo stack
                 action = AddLineAction(main_window, line_item)
                 self.undo_stack.append(action)
                 self.redo_stack.clear()
@@ -606,19 +731,38 @@ class PDFGraphicsView(QGraphicsView):
                 self.logger.info(f"Line added from {start_point} to {end_point}, Orientation: {orientation}")
             else:
                 self.logger.error("Main window instance not found. Cannot add line.")
+                self.show_error_message("Internal Error: Main window not found.")
         except Exception as e:
             self.logger.error(f"Error adding line: {e}", exc_info=True)
-            self.get_main_window().show_error_message(f"Failed to add line: {e}")
+            main_window = self.get_main_window()
+            if main_window:
+                main_window.show_error_message(f"Failed to add line: {e}")
 
-    
     def remove_line(self, line_item):
-        """Remove a specified line_item."""
+        """
+        Remove a specified line_item.
+        
+        :param line_item: LineItem object to be removed.
+        """
         try:
             if line_item in self._line_items:
                 main_window = self.get_main_window()
                 if main_window:
+                    # Remove the line from the scene and internal list
                     self.scene().removeItem(line_item)
                     self._line_items.remove(line_item)
+
+                    # Remove the line from the lines dictionary
+                    # Assuming each line_item has an 'image_filename' attribute
+                    image_filename = getattr(line_item, 'image_filename', None)
+                    if image_filename and image_filename in self.lines:
+                        line_tuple = (line_item.line, line_item.orientation)
+                        try:
+                            self.lines[image_filename].remove(line_tuple)
+                            if not self.lines[image_filename]:
+                                del self.lines[image_filename]
+                        except ValueError:
+                            self.logger.warning(f"Line {line_tuple} not found in lines[{image_filename}].")
 
                     # Create and push RemoveLineAction to undo stack
                     action = RemoveLineAction(main_window, line_item)
@@ -626,16 +770,17 @@ class PDFGraphicsView(QGraphicsView):
                     self.redo_stack.clear()  # Clear redo stack on new action
 
                     self.lineModified.emit()
-
-                    self.logger.info("Line removed.")
+                    self.logger.info("Line removed successfully.")
                 else:
                     self.logger.error("Main window instance not found. Cannot remove line.")
-                    self.get_main_window().show_error_message("Internal Error: Main window not found.")
+                    self.show_error_message("Internal Error: Main window not found.")
             else:
                 self.logger.warning("Attempted to remove a non-existent line.")
         except Exception as e:
             self.logger.error(f"Error removing line: {e}", exc_info=True)
-            self.get_main_window().show_error_message(f"Failed to remove line: {e}")
+            main_window = self.get_main_window()
+            if main_window:
+                main_window.show_error_message(f"Failed to remove line: {e}")
 
     def add_rectangle(self, rect):
         """Add a rectangle to the scene."""
@@ -1115,6 +1260,7 @@ class OCRApp(QMainWindow):
         # Signals for OCR processing
         self.ocr_worker = OcrGui()
         self.ocr_worker.ocr_progress.connect(self.update_progress_bar)
+        self.ocr_worker.ocr_progress.connect(self.update_remaining_time_label)
         self.ocr_worker.ocr_completed.connect(self.on_ocr_completed)
         self.ocr_worker.ocr_error.connect(self.show_error_message)
 
@@ -1381,33 +1527,52 @@ class OCRApp(QMainWindow):
         tool_bar.addAction(show_output_action)
 
     def init_output_dock(self):
-        # Output Dock
+
+        # Create the Output Dock
         self.output_dock = QDockWidget('Output', self)
         self.output_dock.setAllowedAreas(Qt.BottomDockWidgetArea | Qt.TopDockWidgetArea)
 
+        # Create a central widget for the dock and set a vertical layout
+        dock_widget = QWidget()
+        dock_layout = QVBoxLayout()
+        dock_widget.setLayout(dock_layout)
+
         # Create a tab widget to hold the outputs
         self.output_tabs = QTabWidget()
-        self.output_dock.setWidget(self.output_tabs)
+        dock_layout.addWidget(self.output_tabs)
 
-        # Log Output
+        # Add tabs to the tab widget
+        # 1. Log Output Tab
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
         self.output_tabs.addTab(self.log_output, 'Log Output')
 
-        # Table Widget to display tables
+        # 2. Table View Tab
         self.tableWidget = QTableWidget()
         self.output_tabs.addTab(self.tableWidget, 'Table View')
 
-        # CSV Output Preview
+        # 3. CSV Output Preview Tab
         self.csv_output = QTextEdit()
         self.csv_output.setReadOnly(True)
         self.output_tabs.addTab(self.csv_output, 'CSV Output')
 
-        # Set default tab to Log Output
-        self.output_tabs.setCurrentWidget(self.log_output)
+        # Initialize Remaining Time Label
+        self.remaining_time_label = QLabel("Estimated remaining time: N/A", self)
+        self.remaining_time_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.remaining_time_label.setStyleSheet("font-size: 26px;")  # Optional: Adjust font size
 
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.output_dock) 
-        self.output_dock.raise_()                
+        # Add the remaining_time_label to the dock layout
+        dock_layout.addWidget(self.remaining_time_label)
+
+        # Set the dock's central widget
+        self.output_dock.setWidget(dock_widget)
+
+        # Add the dock to the main window at the bottom
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.output_dock)
+
+        # Optionally, raise the dock to ensure it's visible
+        self.output_dock.raise_()
+        
 
     def set_app_icon(self):
         """Set the application window icon using a relative path."""
@@ -1473,7 +1638,15 @@ class OCRApp(QMainWindow):
             QMessageBox.critical(self, "Error", f"An error occurred while loading the help file:\n{e}")
 
     def update_progress_bar(self, tasks_completed, total_tasks):
-        self.progress_bar.setValue(tasks_completed)
+        progress_percentage = int((tasks_completed / total_tasks) * 100)
+        self.progress_bar.setValue(progress_percentage)
+
+    def update_remaining_time_label(self, remaining_time):
+        # Format the remaining_time into minutes and seconds
+        minutes, seconds = divmod(int(remaining_time), 60)
+        time_str = f"Estimated remaining time: {minutes}m {seconds}s"
+        self.remaining_time_label.setText(time_str)
+        self.logger.debug(f"Updated remaining_time_label: {time_str}")
 
     def set_table_detection_method(self, method_name):
         self.table_detection_method = method_name
@@ -1843,12 +2016,17 @@ class OCRApp(QMainWindow):
             self.logger.error(f"Failed to load image '{file_path}': {e}", exc_info=True)
 
     def on_line_moved(self, line_item, new_line):
-        """Handle the movement of a line item."""
+        """
+        Handle the movement of a line item.
+        
+        :param line_item: LineItem object that was moved.
+        :param new_line: QLineF object representing the new line position.
+        """
         try:
             # Capture the previous line position before the move
-            previous_line = line_item.line  # Access the stored line
+            previous_line = line_item.line  # Ensure LineItem has a 'line' attribute
 
-            # Create MoveLineAction
+            # Create MoveLineAction for undo functionality
             action = MoveLineAction(self, line_item, previous_line, new_line)
             self.graphics_view.undo_stack.append(action)
             self.graphics_view.redo_stack.clear()
@@ -1856,13 +2034,17 @@ class OCRApp(QMainWindow):
             self.logger.info(f"Line moved from {previous_line} to {new_line}")
 
             # Update the lines dictionary
-            key = f"{self.graphics_view.current_page_index}_full"
-            if key in self.lines:
+            image_filename = getattr(line_item, 'image_filename', None)
+            if image_filename and image_filename in self.graphics_view.lines:
+                # Remove the old line tuple
+                old_tuple = (previous_line, line_item.orientation)
+                new_tuple = (new_line, line_item.orientation)
                 try:
-                    self.lines[key].remove(previous_line)
-                    self.lines[key].append(new_line)
+                    self.graphics_view.lines[image_filename].remove(old_tuple)
+                    self.graphics_view.lines[image_filename].append(new_tuple)
+                    self.logger.debug(f"Updated lines for {image_filename}: {self.graphics_view.lines[image_filename]}")
                 except ValueError:
-                    self.logger.warning(f"Line {previous_line} not found in lines[{key}].")
+                    self.logger.warning(f"Line {old_tuple} not found in lines[{image_filename}].")
         except AttributeError:
             self.logger.error(f"LineItem does not have 'line' attribute.", exc_info=True)
             self.show_error_message("Failed to move line: Internal error.")
@@ -2299,59 +2481,137 @@ class OCRApp(QMainWindow):
             return QImage()
 
     def initialize_ocr_engines(self):
+        # Disable the Run OCR button to prevent multiple initialization attempts
+        self.run_ocr_action.setEnabled(False)
+        self.logger.debug("Run OCR button disabled to prevent multiple initializations.")
+        
+        # Update the status bar to inform the user about the initialization process
         self.status_bar.showMessage('Initializing OCR engines...')
         QApplication.processEvents()
+        
         try:
-            # Use GPU if available
+            # Determine if GPU is available for OCR processing
             use_gpu = paddle.device.is_compiled_with_cuda()
+            self.logger.debug(f"GPU available: {use_gpu}")
+            
+            # Initialize PaddleOCR engine
+            self.logger.info("Initializing PaddleOCR engine.")
             self.ocr_engine = ocr_module.initialize_paddleocr(use_gpu)
+            self.logger.debug("PaddleOCR engine initialized successfully.")
+            
+            # Initialize EasyOCR engine
+            self.logger.info("Initializing EasyOCR engine.")
             self.easyocr_engine = ocr_module.initialize_easyocr(use_gpu)
+            self.logger.debug("EasyOCR engine initialized successfully.")
+            
+            # Mark OCR engines as initialized
             self.ocr_initialized = True
-            self.status_bar.showMessage('OCR engines initialized', 5000)
+            self.logger.info("Both OCR engines initialized successfully.")
+            
+            self.status_bar.showMessage('OCR engines initialized successfully.', 5000)
+        
         except Exception as e:
             self.show_error_message(f'Failed to initialize OCR engines: {e}')
+            self.logger.error(f'Failed to initialize OCR engines: {e}', exc_info=True)
             self.ocr_initialized = False
+        
+        finally:
+            self.run_ocr_action.setEnabled(True)
+            self.logger.debug("Run OCR button re-enabled after initialization attempt.")
 
     def run_ocr(self):
+        """
+        Initiates the OCR process by setting up necessary parameters,
+        initializing the OCRWorker thread, and handling user interactions.
+        """
+        # Check if OCR engines are initialized
         if not self.ocr_initialized:
             self.show_error_message('Please initialize the OCR engines before running OCR.')
+            self.logger.error('Attempted to run OCR without initialized OCR engines.')
             return
+
+        # Validate PDF file path
         if not self.current_pdf_path or not os.path.exists(self.current_pdf_path):
             self.show_error_message('Invalid or missing PDF file path.')
             self.logger.error('Invalid or missing PDF file path.')
             return
+
         self.status_bar.showMessage('Running OCR...', 5000)
         QApplication.processEvents()
+
+        # Save current rectangles and lines (Assuming these methods are defined elsewhere)
         self.save_current_rectangles()
         self.save_current_lines()
+
+        # Set up the progress bar
         self.progress_bar = QProgressBar()
         self.status_bar.addPermanentWidget(self.progress_bar)
+        self.progress_bar.setMaximum(100)  # Percentage-based progress
 
-        total_tasks = len(self.graphics_view.pdf_images)
-        self.progress_bar.setMaximum(total_tasks)
         self.progress_bar.setValue(0)
         self.ocr_cancel_event = threading.Event()
 
+        # Update the OCR action button to allow cancellation
         self.run_ocr_action.setText('Cancel OCR')
         self.ocr_running = True
 
+        # Set up directories and output paths
         storedir = os.path.abspath("temp_gui")
         os.makedirs(storedir, exist_ok=True)
         output_csv = os.path.join(self.project_folder, "ocr_results.csv")
 
+        # Retrieve the PDFGraphicsView instance
+        pdf_graphics_view = self.findChild(PDFGraphicsView)
+        if not pdf_graphics_view:
+            self.show_error_message('Failed to locate PDFGraphicsView.')
+            self.logger.error('PDFGraphicsView instance not found.')
+            return
+
+        # Extract user-added lines with their orientations
+        user_lines = {}
+        for image_filename, line_items in pdf_graphics_view.lines.items():
+            # Ensure that each line item is a tuple of (QLineF, orientation)
+            structured_lines = []
+            for line_item in line_items:
+                if hasattr(line_item, 'line') and hasattr(line_item, 'orientation'):
+                    structured_lines.append((line_item.line, line_item.orientation))
+                else:
+                    self.logger.warning(f"Invalid line item format in {image_filename}. Skipping this line.")
+            if structured_lines:
+                user_lines[image_filename] = structured_lines
+
+        # Check if user_lines is correctly structured
+        for image, lines in user_lines.items():
+            for line, orientation in lines:
+                if not isinstance(line, QLineF):
+                    self.logger.error(f"Invalid line object in {image} for orientation {orientation}.")
+                if orientation not in ['horizontal', 'vertical']:
+                    self.logger.error(f"Invalid orientation '{orientation}' in {image}.")
+        
+        self.logger.debug(f"User-added lines: {user_lines}")
+
+        # Instantiate the OCRWorker thread
         self.ocr_worker = OCRWorker(
-            self.current_pdf_path,
-            storedir,
-            output_csv,
-            self.ocr_cancel_event,
-            self.ocr_engine,
-            self.easyocr_engine
+            pdf_file=self.current_pdf_path,
+            storedir=storedir,
+            output_csv=output_csv,
+            ocr_cancel_event=self.ocr_cancel_event,
+            ocr_engine=self.ocr_engine,
+            easyocr_engine=self.easyocr_engine,
+            user_lines=user_lines
         )
+
+        # Connect OCRWorker signals to respective slots
         self.ocr_worker.ocr_progress.connect(self.on_ocr_progress)
+        self.ocr_worker.ocr_time_estimate.connect(self.update_remaining_time_label)
         self.ocr_worker.ocr_completed.connect(self.on_ocr_completed)
         self.ocr_worker.ocr_error.connect(self.on_ocr_error)
-        self.ocr_worker.start()
 
+        # Start the OCRWorker thread
+        self.ocr_worker.start()
+        self.logger.info("OCRWorker thread started.")
+
+        # Update the OCR action button to allow cancellation
         self.run_ocr_action.triggered.disconnect(self.run_ocr)
         self.run_ocr_action.triggered.connect(self.cancel_ocr)
 
@@ -2604,14 +2864,19 @@ class OCRApp(QMainWindow):
         self.run_ocr_action.setText('Run OCR')
 
     def cancel_ocr(self):
-        """Cancel the ongoing OCR process."""
-        if self.ocr_running and hasattr(self, 'ocr_worker') and self.ocr_worker:
-            self.ocr_worker.cancel()
-            self.show_error_message("OCR process has been cancelled.")
-            self.logger.info("OCR process has been cancelled by the user.")
-            self.cleanup_progress_bar()
+        """
+        Cancels the ongoing OCR process by setting the cancellation event.
+        Updates the UI accordingly.
+        """
+        if self.ocr_running:
+            self.ocr_cancel_event.set()
+            self.logger.info("OCR cancellation requested by user.")
+            self.status_bar.showMessage('OCR cancellation requested.', 5000)
+            self.run_ocr_action.setText('Run OCR')
+            self.ocr_running = False
         else:
-            self.logger.warning("No OCR process is currently running to cancel.")
+            self.logger.warning("Attempted to cancel OCR, but no OCR process is running.")
+            self.show_error_message('No OCR process is currently running.')
 
     def cleanup_progress_bar(self):
         """Cleanup the progress bar after OCR completion or error."""
