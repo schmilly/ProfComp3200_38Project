@@ -27,7 +27,7 @@ pip install pyinstaller
 
 REM Check if pathlib is installed
 python -c "import pathlib" >nul 2>&1
-if errorlevel 1 (
+if errorlevel 0 (
     echo "PathLib is not installed; no action needed."
 ) else (
     echo "PathLib is installed; Uninstalling."
