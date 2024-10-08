@@ -25,6 +25,24 @@ pip install -r requirements.txt
 REM Install PyInstaller
 pip install pyinstaller
 
+REM Check if pathlib is installed
+python -c "import pathlib" >nul 2>&1
+if errorlevel 1 (
+    echo "PathLib is not installed; no action needed."
+) else (
+    echo "PathLib is installed; Uninstalling."
+    python -m pip uninstall -y pathlib
+)
+
+REM Create the executable
+pyinstaller --onefile --windowed Gui_final.py
+
+IF %ERRORLEVEL% NEQ 0 (
+    echo Failed to create the executable.
+    pause
+    exit /b 1
+)
+
 REM Check if Poppler is installed by checking for pdftoppm
 where pdftoppm >nul 2>&1
 IF %ERRORLEVEL% NEQ 0 (
@@ -35,14 +53,6 @@ IF %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-REM Create the executable
-pyinstaller --onefile --windowed OcrGui.py
-
-IF %ERRORLEVEL% NEQ 0 (
-    echo Failed to create the executable.
-    pause
-    exit /b 1
-)
 
 echo Installation complete.
 echo The executable is located in the dist\ folder.
