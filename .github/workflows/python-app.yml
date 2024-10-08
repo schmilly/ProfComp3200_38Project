@@ -60,7 +60,7 @@ jobs:
   
   # Job for running the Windows batch file
   build_Windows_bin:
-    needs: build   # Ensures this job runs after the Ubuntu job completes
+    needs: build_Linux_Python   # Ensures this job runs after the Ubuntu job completes
     runs-on: windows-latest
 
     defaults:
