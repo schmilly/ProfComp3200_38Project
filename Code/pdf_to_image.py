@@ -12,12 +12,13 @@ def enhance_image(image):
     @param image: A PIL Image object.
     @return: Enhanced PIL Image object.
     """
+    image = image.convert('L')  # Convert to grayscale
     enhancer = ImageEnhance.Contrast(image)
     image = enhancer.enhance(2)  # Increase contrast
     enhancer = ImageEnhance.Sharpness(image)
-    image = enhancer.enhance(2)  # Increase sharpness
+    image = enhancer.enhance(3)  # Increase sharpness
     image = image.filter(ImageFilter.MedianFilter(size=3))  # Reduces noise
-    return image
+    return image.convert('RGB')
 
 def pdf_to_images(pdf_path, dpi=400, rotation_angle=0):
     """
