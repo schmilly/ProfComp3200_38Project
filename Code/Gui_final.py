@@ -1573,14 +1573,13 @@ class OCRApp(QMainWindow):
         # Optionally, raise the dock to ensure it's visible
         self.output_dock.raise_()
         
-
     def set_app_icon(self):
         """Set the application window icon using a relative path."""
         # Get the absolute path to the directory containing this script
         script_dir = os.path.dirname(os.path.abspath(__file__))
 
         # Construct the full path to the icon.png
-        icon_path = os.path.join(script_dir, 'icon.png')
+        icon_path = os.path.join(script_dir, 'icon_1_Improved.png')
 
         # Check if the icon file exists
         if os.path.exists(icon_path):
