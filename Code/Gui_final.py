@@ -1655,7 +1655,9 @@ class OCRApp(QMainWindow):
     def update_recent_files_menu(self):
         self.recent_files_menu.clear()
         for file_path in self.recent_files:
-            action = QAction(file_path, self)
+            file_name = os.path.basename(file_path)
+            action = QAction(file_name, self)
+            action.setData(file_path)
             action.triggered.connect(lambda checked, path=file_path: self.open_recent_file(path))
             self.recent_files_menu.addAction(action)
 
