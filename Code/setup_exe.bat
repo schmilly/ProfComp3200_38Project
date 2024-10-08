@@ -300,7 +300,7 @@ REM ----------------------------------------------------------------------------
 echo ================================
 echo Creating executable with PyInstaller...
 echo ================================
-pyinstaller --onefile --windowed Gui_final.py
+pyinstaller --noconfirm --onedir --console Gui_final.py
 IF %ERRORLEVEL% NEQ 0 (
     echo Failed to create the executable.
     pause
@@ -324,7 +324,6 @@ IF %ERRORLEVEL% NEQ 0 (
     echo Please install Poppler and add it to your system PATH.
     echo Refer to https://github.com/oschwartz10612/poppler-windows for installation instructions.
     pause
-    EXIT /B 1
 ) ELSE (
     echo All installations completed successfully.
     echo The executable is located in the dist\ folder.
