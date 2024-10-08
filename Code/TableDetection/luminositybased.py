@@ -105,7 +105,7 @@ def findTable(image_path="Image/Path/here",HorizontalState = "border",VerticalSt
     final_image = draw_vertical_lines(image, Vertical)
 
     #final_image.save('output_image_with_lines.png')
-    final_image.show()
+    #final_image.show()
 
     return [Horizontal,Vertical]
 

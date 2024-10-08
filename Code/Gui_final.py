@@ -105,27 +105,63 @@ class LineItem(QGraphicsObject):
     moved = pyqtSignal(QLineF, QLineF)  # Signal emitted when the line is moved (old_line, new_line)
 
     def __init__(self, line, orientation='horizontal', image_filename=None, parent=None):
+        """
+        Initialize the LineItem.
+
+        Parameters:
+            line (QLineF or tuple): Either a QLineF object or a tuple containing (QLineF, orientation).
+            orientation (str): 'horizontal' or 'vertical'. Default is 'horizontal'.
+            image_filename (str): The filename of the associated image. Default is None.
+            parent (QGraphicsObject): The parent graphics object. Default is None.
+        """
         super().__init__(parent)
         self.logger = logging.getLogger(__name__)  # Initialize the logger
-        self.orientation = orientation  # 'horizontal' or 'vertical'
+
+        # Handle initialization with tuple (line, orientation)
+        if isinstance(line, tuple):
+            if len(line) != 2:
+                self.logger.error("Line tuple must contain exactly two elements: (QLineF, orientation).")
+                raise ValueError("Line tuple must contain exactly two elements: (QLineF, orientation).")
+            if not isinstance(line[0], QLineF):
+                self.logger.error("First element of the tuple must be a QLineF object.")
+                raise TypeError("First element of the tuple must be a QLineF object.")
+            if line[1] not in ['horizontal', 'vertical']:
+                self.logger.error("Orientation must be either 'horizontal' or 'vertical'.")
+                raise ValueError("Orientation must be either 'horizontal' or 'vertical'.")
+            self._line, self.orientation = line
+        else:
+            if not isinstance(line, QLineF):
+                self.logger.error("Line must be a QLineF object or a tuple of (QLineF, orientation).")
+                raise TypeError("Line must be a QLineF object or a tuple of (QLineF, orientation).")
+            if orientation not in ['horizontal', 'vertical']:
+                self.logger.error("Orientation must be either 'horizontal' or 'vertical'.")
+                raise ValueError("Orientation must be either 'horizontal' or 'vertical'.")
+            self.orientation = orientation
+            self._line = QLineF(line)  # Store the line as an attribute
+
+        self._previous_line = QLineF(self._line)  # Initialize previous_line with the initial line position
+        self.image_filename = image_filename  # Associate the line with an image
+
+        # Set up pen for drawing the line
         self._pen = QPen(QColor(0, 0, 255), 2, Qt.SolidLine)  # Blue pen, 2 pixels wide
         self.setPen(self._pen)
+
+        # Enable item flags for interactivity
         self.setFlags(
             QGraphicsObject.ItemIsSelectable |
             QGraphicsObject.ItemIsMovable |
             QGraphicsObject.ItemSendsGeometryChanges
         )
         self.setAcceptHoverEvents(True)
-        self._line = QLineF(line)  # Store the line as an attribute
-        self._previous_line = QLineF(line)  # Initialize previous_line with the initial line position
-        self.image_filename = image_filename  # Associate the line with an image
 
     def boundingRect(self):
+        """Define the bounding rectangle for the LineItem."""
         pen_width = self._pen.widthF()
         extra = pen_width / 2.0
         return QRectF(self._line.p1(), self._line.p2()).normalized().adjusted(-extra, -extra, extra, extra)
 
     def paint(self, painter, option, widget=None):
+        """Paint the LineItem using the current pen."""
         try:
             painter.setPen(self._pen)
             painter.drawLine(self._line)
@@ -133,19 +169,40 @@ class LineItem(QGraphicsObject):
             self.logger.error(f"Error in LineItem paint: {e}", exc_info=True)
 
     def setPen(self, pen):
+        """Set a new pen for the LineItem and update its appearance."""
         self._pen = pen
         self.update()
 
     @property
     def line(self):
+        """Get the current QLineF object."""
         return self._line
 
     @line.setter
     def line(self, new_line):
+        """
+        Set a new QLineF object for the LineItem.
+
+        Parameters:
+            new_line (QLineF): The new line to set.
+        """
+        if not isinstance(new_line, QLineF):
+            self.logger.error("New line must be a QLineF object.")
+            raise TypeError("New line must be a QLineF object.")
         self._line = new_line
         self.update()
 
     def itemChange(self, change, value):
+        """
+        Handle changes to the item's state, particularly its position.
+
+        Parameters:
+            change (GraphicsItemChange): The type of change.
+            value (QVariant): The new value associated with the change.
+
+        Returns:
+            QVariant: The value to be applied.
+        """
         if change == QGraphicsObject.ItemPositionChange:
             # Calculate the movement delta
             new_pos = value
@@ -489,9 +546,8 @@ class OCRWorker(QThread):
             output_dir = os.path.dirname(self.output_csv)
             os.makedirs(output_dir, exist_ok=True)
 
-            # Convert PDF to images
-            self.logger.info("Converting PDF to images.")
-            image_list = ocr_module.convert_pdf_to_images(self.pdf_file, self.storedir)
+            # Use the existing image list passed from the GUI
+            image_list = self.image_list
             if self.ocr_cancel_event.is_set():
                 self.emit_cancellation()
 
@@ -592,6 +648,61 @@ class OCRWorker(QThread):
             )
         return combined_TableMap
 
+    # def _merge_user_lines(self, auto_TableMap, image_list):
+    #     combined_TableMap = []
+        
+    #     # Log the complete user lines for debugging
+    #     self.logger.debug(f"Complete user_lines: {self.user_lines}")
+        
+    #     for image_path, auto_map in zip(image_list, auto_TableMap):
+    #         # Extract just the base filename (without the directory path)
+    #         image_filename = os.path.basename(image_path)
+            
+    #         # Get user lines corresponding to the image filename
+    #         user_lines = self.user_lines.get(image_filename, [])
+            
+    #         # Separate user lines into columns (vertical) and rows (horizontal)
+    #         user_columns = [line for line, orientation in user_lines if orientation == 'vertical']
+    #         user_rows = [line for line, orientation in user_lines if orientation == 'horizontal']
+            
+    #         # Convert QLineF objects into tuples (x1, y1, x2, y2) and ensure proper ordering
+    #         user_columns = [
+    #             (min(line.x1(), line.x2()), min(line.y1(), line.y2()), max(line.x1(), line.x2()), max(line.y1(), line.y2())) 
+    #             for line in user_columns
+    #         ]
+    #         user_rows = [
+    #             (min(line.x1(), line.x2()), min(line.y1(), line.y2()), max(line.x1(), line.x2()), max(line.y1(), line.y2())) 
+    #             for line in user_rows
+    #         ]
+
+    #         # Validate and correct invalid cropping coordinates
+    #         def validate_crop_coordinates(col, row):
+    #             left, upper, right, lower = col[0], row[0], col[2], row[2]
+    #             if left > right or upper > lower:
+    #                 self.logger.error(f"Invalid coordinates found: {left, upper, right, lower}. Fixing.")
+    #                 left, right = min(left, right), max(left, right)
+    #                 upper, lower = min(upper, lower), max(upper, lower)
+    #             return (left, upper, right, lower)
+
+    #         # Ensure coordinates are correctly ordered for cropping
+    #         combined_columns = [
+    #             validate_crop_coordinates(col, row) 
+    #             for col in user_columns for row in user_rows
+    #         ]
+    #         combined_rows = auto_map[1] + user_rows  # Make sure combined_rows is assigned here
+
+    #         # Add the combined table map for this image
+    #         combined_TableMap.append([combined_columns, combined_rows])
+            
+    #         # Log the details for debugging
+    #         self.logger.debug(
+    #             f"Merged {len(user_columns)} user columns and {len(user_rows)} user rows "
+    #             f"with {len(auto_map[0])} auto columns and {len(auto_map[1])} auto rows for image {image_filename}."
+    #         )
+        
+    #     # Return the combined table map
+    #     return combined_TableMap
+
     def emit_cancellation(self):
         """Emits an OCR cancellation signal and stops processing."""
         self.logger.info("OCR process cancelled by user.")
@@ -606,7 +717,7 @@ class PDFGraphicsView(QGraphicsView):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        #self.setAcceptDrops(True)
+        # Initialize the scene
         self.setScene(QGraphicsScene(self))
         self._start_pos = None
         self._current_rect_item = None
@@ -624,9 +735,10 @@ class PDFGraphicsView(QGraphicsView):
         self.adding_vertical_line = False
         self.adding_horizontal_line = False
         self.manual_table_detection_mode = False
-        self.lines = {}
+        self.lines = {}  # Dictionary to store lines with image filenames as keys
         self.current_image_filename = None
         self.main_window = None
+        self.image_file_paths = []  # List to store image file paths
 
         try:
             self.rectangleSelected.connect(self.get_main_window().on_rectangle_selected)
@@ -635,9 +747,11 @@ class PDFGraphicsView(QGraphicsView):
             self.logger.error(f"Error connecting signals: {e}")
 
     def set_main_window(self, main_window):
+        """Set the reference to the main window."""
         self.main_window = main_window
 
     def get_main_window(self):
+        """Retrieve the main window instance."""
         if self.main_window:
             return self.main_window
         else:
@@ -649,6 +763,14 @@ class PDFGraphicsView(QGraphicsView):
                 parent = parent.parent()
             self.logger.error("Main window not found.")
             return None
+        
+    def get_lines_for_image(self, image_filename):
+        """Retrieve lines associated with a specific image filename."""
+        return self.lines.get(image_filename, [])
+
+    def get_all_lines(self):
+        """Retrieve all lines for all images."""
+        return self.lines.copy()
 
     def enable_manual_table_detection(self, enabled):
         """Enable or disable manual table detection mode."""
@@ -681,18 +803,24 @@ class PDFGraphicsView(QGraphicsView):
         else:
             self.logger.info("Horizontal Line Mode deactivated.")
             self.status_bar_message("Horizontal Line Mode Disabled.")
-    
+
     def show_error_message(self, message):
         """Displays an error message to the user."""
         QMessageBox.critical(self, "Error", message)
         self.logger.error(f"Error displayed: {message}")
-    
+
     def set_current_image_filename(self, filename):
+        """Set the current image filename."""
         self.current_image_filename = filename
 
     def get_current_image_filename(self):
-        return self.current_image_filename
-    
+        """Retrieve the basename of the currently loaded image."""
+        if self.current_image_filename:
+            return os.path.basename(self.current_image_filename)
+        else:
+            self.logger.error("Current image filename is not set.")
+            return None
+        
     def add_line(self, start_point, end_point, orientation=None):
         """
         Add a straight line from start_point to end_point, extending from edge to edge.
@@ -714,7 +842,7 @@ class PDFGraphicsView(QGraphicsView):
                     orientation = 'horizontal' if delta_x > delta_y else 'vertical'
 
             # Get the boundaries of the image
-            if self._pixmap_item:
+            if hasattr(self, '_pixmap_item') and self._pixmap_item:
                 pixmap_rect = self._pixmap_item.pixmap().rect()
             else:
                 pixmap_rect = self.sceneRect()
@@ -755,13 +883,16 @@ class PDFGraphicsView(QGraphicsView):
                     self.lines[current_image_filename] = []
 
                 # Append the new line to the lines dictionary
-                self.lines[current_image_filename].append((QLineF(start_point, end_point), orientation))
+                self.lines[current_image_filename].append((QLineF(line), orientation))  # Ensure a copy is stored
 
                 # Create and push AddLineAction to undo stack
                 action = AddLineAction(main_window, line_item)
                 self.undo_stack.append(action)
                 self.redo_stack.clear()
                 self.lineModified.emit()
+
+                # Save user lines with consistent mapping
+                self.save_user_lines(self.current_page_index, self.lines[current_image_filename])
 
                 self.logger.info(f"Line added from {start_point} to {end_point}, Orientation: {orientation}")
             else:
@@ -788,7 +919,6 @@ class PDFGraphicsView(QGraphicsView):
                     self._line_items.remove(line_item)
 
                     # Remove the line from the lines dictionary
-                    # Assuming each line_item has an 'image_filename' attribute
                     image_filename = getattr(line_item, 'image_filename', None)
                     if image_filename and image_filename in self.lines:
                         line_tuple = (line_item.line, line_item.orientation)
@@ -805,6 +935,10 @@ class PDFGraphicsView(QGraphicsView):
                     self.redo_stack.clear()  # Clear redo stack on new action
 
                     self.lineModified.emit()
+
+                    # Save updated user lines
+                    self.save_user_lines(self.current_page_index, self.lines.get(image_filename, []))
+
                     self.logger.info("Line removed successfully.")
                 else:
                     self.logger.error("Main window instance not found. Cannot remove line.")
@@ -817,9 +951,23 @@ class PDFGraphicsView(QGraphicsView):
             if main_window:
                 main_window.show_error_message(f"Failed to remove line: {e}")
 
-    def get_user_lines(self):
-        return self.lines.copy()
-    
+    def save_user_lines(self, image_filename, lines):
+        """Save user-added lines with image filename as the key."""
+        try:
+            if not image_filename:
+                self.logger.error("Image filename is empty. Cannot save user lines.")
+                return
+            if not os.path.exists(os.path.join(self.image_file_paths[self.current_page_index])):
+                self.logger.error(f"Image file does not exist: {self.image_file_paths[self.current_page_index]}")
+                return
+            self.lines[image_filename] = lines
+            self.logger.info(f"Lines saved for {image_filename} with orientations.")
+        except Exception as e:
+            self.logger.error(f"Error in save_user_lines: {e}", exc_info=True)
+            main_window = self.get_main_window()
+            if main_window:
+                main_window.show_error_message(f"Failed to save user lines: {e}")
+
     def add_rectangle(self, rect):
         """Add a RectItem to the scene."""
         try:
@@ -834,7 +982,7 @@ class PDFGraphicsView(QGraphicsView):
             self.scene().addItem(rect_item)
             self._rect_items.append(rect_item)
 
-            # Connect the moved signal to handle rectangle movements
+            # Connect the moved signal
             rect_item.moved.connect(lambda new_rect, item=rect_item: self.on_rect_moved(item, new_rect))
 
             # Create and push AddRectangleAction to undo stack
@@ -843,6 +991,11 @@ class PDFGraphicsView(QGraphicsView):
             self.redo_stack.clear()  # Clear redo stack on new action
 
             self.lineModified.emit()
+
+            # Save user lines with consistent mapping (rectangles might not be lines; adjust as needed)
+            # Example: If rectangles are part of table detection, you might need to store them separately
+            self.save_user_lines(self.current_page_index, self.lines.get(current_image_filename, []))
+
             self.logger.info(f"Rectangle added: {rect}")
         except Exception as e:
             self.logger.error(f"Error adding rectangle: {e}", exc_info=True)
@@ -852,7 +1005,7 @@ class PDFGraphicsView(QGraphicsView):
         """Handle the movement of a RectItem."""
         try:
             # Capture the previous rectangle position
-            previous_rect = rect_item.rect
+            previous_rect = rect_item.rect()
 
             # Create MoveRectangleAction for undo functionality
             action = MoveRectangleAction(self, rect_item, previous_rect, new_rect)
@@ -861,7 +1014,7 @@ class PDFGraphicsView(QGraphicsView):
             self.lineModified.emit()
             self.logger.info(f"Rectangle moved from {previous_rect} to {new_rect}")
 
-            # Update the user_rects dictionary
+            # Update the lines dictionary if rectangles are part of it
             image_filename = rect_item.image_filename
             if image_filename and image_filename in self.lines:
                 try:
@@ -870,6 +1023,8 @@ class PDFGraphicsView(QGraphicsView):
                     # Add the new rectangle
                     self.lines[image_filename].append(new_rect)
                     self.logger.debug(f"Updated rectangles for {image_filename}: {self.lines[image_filename]}")
+                    # Save the updated user lines
+                    self.save_user_lines(self.current_page_index, self.lines[image_filename])
                 except ValueError:
                     self.logger.warning(f"Rectangle {previous_rect} not found in lines[{image_filename}].")
         except Exception as e:
@@ -888,19 +1043,40 @@ class PDFGraphicsView(QGraphicsView):
                 self.undo_stack.append(action)
                 self.redo_stack.clear()  # Clear redo stack on new action
 
+                self.lineModified.emit()
+
+                # Update the lines dictionary
+                image_filename = rect_item.image_filename
+                if image_filename and image_filename in self.lines:
+                    try:
+                        # Remove the rectangle from lines
+                        rect_tuple = rect_item.rect()
+                        self.lines[image_filename].remove(rect_tuple)
+                        if not self.lines[image_filename]:
+                            del self.lines[image_filename]
+                        # Save the updated user lines
+                        self.save_user_lines(self.current_page_index, self.lines.get(image_filename, []))
+                    except ValueError:
+                        self.logger.warning(f"Rectangle {rect_tuple} not found in lines[{image_filename}].")
+
                 self.logger.info("Rectangle removed.")
             else:
                 self.logger.warning("Attempted to remove a non-existent rectangle.")
         except Exception as e:
             self.logger.error(f"Error removing rectangle: {e}", exc_info=True)
-            self.get_main_window().show_error_message(f"Failed to remove rectangle: {e}")
+            main_window = self.get_main_window()
+            if main_window:
+                main_window.show_error_message(f"Failed to remove rectangle: {e}")
 
     def load_image(self, image, filename=None):
         """Load and display the given image in the graphics view."""
         try:
+            # Clear existing scene items
             self.scene().clear()
             self._rect_items = []
             self._line_items = []
+
+            # Load image as pixmap
             if isinstance(image, QImage):
                 pixmap = QPixmap.fromImage(image)
             elif isinstance(image, QPixmap):
@@ -910,18 +1086,43 @@ class PDFGraphicsView(QGraphicsView):
                 self._image_loaded = False
                 self._pixmap_item = None
                 return
+
+            # Add pixmap to the scene
             self._pixmap_item = self.scene().addPixmap(pixmap)
-            # Set the scene rect to match the pixmap's bounding rect
             self.scene().setSceneRect(self._pixmap_item.boundingRect())
-            # Fit the view to the pixmap item
             self.fitInView(self._pixmap_item, Qt.KeepAspectRatio)
             self._image_loaded = True
+
+            # Set the current image filename
+            if filename:
+                self.current_image_filename = filename
+            else:
+                self.logger.warning("No filename provided when loading the image.")
+
+            # Log successful image load
             self.logger.debug(f"Image loaded successfully in PDFGraphicsView. Pixmap item: {self._pixmap_item}")
-            self.current_image_filename = filename
+
+            # Update the current page index based on the filename
+            if filename and 'page_' in filename:
+                try:
+                    base_filename = os.path.basename(filename)
+                    page_num_str = base_filename.split('_')[1].split('.')[0]
+                    self.current_page_index = int(page_num_str) - 1  # Zero-based index
+
+                    # Append to image_file_paths if the filename is not already present
+                    if filename not in self.image_file_paths:
+                        self.image_file_paths.append(filename)
+                except (IndexError, ValueError) as e:
+                    self.logger.warning(f"Unable to parse page index from filename: {filename}. Error: {e}")
+            else:
+                self.logger.warning(f"Filename does not follow the expected pattern: {filename}")
+
         except Exception as e:
+            # Log any errors that occur during image loading
             self.logger.error(f"Error loading image in PDFGraphicsView: {e}", exc_info=True)
             self._image_loaded = False
             self._pixmap_item = None
+
 
     def mousePressEvent(self, event):
         try:
@@ -959,7 +1160,7 @@ class PDFGraphicsView(QGraphicsView):
                 super().mousePressEvent(event)
         except Exception as e:
             self.logger.error(f"Error in mousePressEvent: {e}")
-            self.get_main_window().show_error_message(f"An error occurred: {e}")
+            self.show_error_message(f"An error occurred: {e}")
 
     def mouseMoveEvent(self, event):
         try:
@@ -987,7 +1188,7 @@ class PDFGraphicsView(QGraphicsView):
                 super().mouseMoveEvent(event)
         except Exception as e:
             self.logger.error(f"Error in mouseMoveEvent: {e}")
-            self.get_main_window().show_error_message(f"An error occurred: {e}")
+            self.show_error_message(f"An error occurred: {e}")
 
     def mouseReleaseEvent(self, event):
         try:
@@ -1006,7 +1207,9 @@ class PDFGraphicsView(QGraphicsView):
                     self.cropping_mode = False
                     self.enable_cropping_mode(False)
                     # Uncheck the cropping action in the main window
-                    self.get_main_window().cropping_mode_action.setChecked(False)
+                    main_window = self.get_main_window()
+                    if main_window:
+                        main_window.cropping_mode_action.setChecked(False)
 
                 elif hasattr(self, '_temp_line') and self._temp_line:
                     # Finalize line
@@ -1030,8 +1233,10 @@ class PDFGraphicsView(QGraphicsView):
                         self.adding_vertical_line = False
                         self.adding_horizontal_line = False
                         # Uncheck the toolbar buttons
-                        self.get_main_window().add_vertical_line_action.setChecked(False)
-                        self.get_main_window().add_horizontal_line_action.setChecked(False)
+                        main_window = self.get_main_window()
+                        if main_window:
+                            main_window.add_vertical_line_action.setChecked(False)
+                            main_window.add_horizontal_line_action.setChecked(False)
                 elif hasattr(self, '_temp_rect_item') and self._temp_rect_item:
                     # Finalize rectangle in manual mode
                     rect = self._temp_rect_item.rect()
@@ -1045,8 +1250,8 @@ class PDFGraphicsView(QGraphicsView):
             else:
                 super().mouseReleaseEvent(event)
         except Exception as e:
-            self.logger.error(f"Error in mouseReleaseEvent: {e}", exc_info=True)
-            self.get_main_window().show_error_message(f"An error occurred: {e}")
+            self.logger.error(f"Error in mouseReleaseEvent: {e}")
+            self.show_error_message(f"An error occurred: {e}")
 
     def wheelEvent(self, event):
         try:
@@ -1065,8 +1270,12 @@ class PDFGraphicsView(QGraphicsView):
 
     def status_bar_message(self, message, duration=5000):
         """Helper method to display messages in the status bar."""
-        self.get_main_window().status_bar.showMessage(message, duration)
-    
+        main_window = self.get_main_window()
+        if main_window:
+            main_window.status_bar.showMessage(message, duration)
+        else:
+            self.logger.error("Main window instance not found. Cannot display status bar message.")
+
     def add_rectangle_at_position(self, pos):
         """Add a rectangle at the given position."""
         try:
@@ -1089,7 +1298,7 @@ class PDFGraphicsView(QGraphicsView):
             self.logger.info(f"Rectangle added at {rect}")
         except Exception as e:
             self.logger.error(f"Error adding rectangle: {e}", exc_info=True)
-            self.get_main_window().show_error_message(f"Failed to add rectangle: {e}")
+            self.show_error_message(f"Failed to add rectangle: {e}")
 
     def keyPressEvent(self, event):
         try:
@@ -1112,7 +1321,7 @@ class PDFGraphicsView(QGraphicsView):
                 super().keyPressEvent(event)
         except Exception as e:
             self.logger.error(f"Error in keyPressEvent: {e}")
-            self.get_main_window().show_error_message(f"An error occurred: {e}")
+            self.show_error_message(f"An error occurred: {e}")
 
     def undo_last_action(self):
         """Undo the last action."""
@@ -1126,7 +1335,7 @@ class PDFGraphicsView(QGraphicsView):
                 self.logger.info("No actions to undo.")
         except Exception as e:
             self.logger.error(f"Error performing undo: {e}", exc_info=True)
-            self.get_main_window().show_error_message(f"Failed to undo: {e}")
+            self.show_error_message(f"Failed to undo: {e}")
 
     def redo_last_action(self):
         """Redo the last undone action."""
@@ -1140,22 +1349,25 @@ class PDFGraphicsView(QGraphicsView):
                 self.logger.info("No actions to redo.")
         except Exception as e:
             self.logger.error(f"Error performing redo: {e}", exc_info=True)
-            self.get_main_window().show_error_message(f"Failed to redo: {e}")
+            self.show_error_message(f"Failed to redo: {e}")
 
     def get_rectangles(self):
+        """Return a list of all rectangles."""
         return [item.rect() for item in self._rect_items]
 
     def clear_rectangles(self):
+        """Clear all rectangles from the scene."""
         for item in self._rect_items:
             self.scene().removeItem(item)
         self._rect_items.clear()
 
     def enable_cropping_mode(self, enabled):
+        """Enable or disable cropping mode."""
         self.cropping_mode = enabled
         if enabled:
             self.setDragMode(QGraphicsView.NoDrag)
         else:
-            self.setDragMode(QGraphicsView.ScrollHandDrag)
+            self.setDragMode(QGraphicsView.ScrollHandDrag())
 
     def display_lines(self, lines, key=None):
         """Display detected table lines on the image."""
@@ -1169,20 +1381,30 @@ class PDFGraphicsView(QGraphicsView):
 
             # Clear existing lines for the key
             existing_lines = self.lines.get(key, [])
-            for line in existing_lines:
+            for line_tuple in existing_lines:
+                line, _ = line_tuple  # Unpack the tuple
                 for item in self._line_items.copy():  # Use copy to avoid modification during iteration
-                    if item.line == line:
+                    if isinstance(item, LineItem) and item.line == line:
                         self.scene().removeItem(item)
                         self._line_items.remove(item)
                         break
 
-            # Add new lines
+            # Assign the new lines
             self.lines[key] = lines
-            for line in lines:
-                line_item = LineItem(line)
-                line_item.setPen(pen)  # Use the setPen method
-                orientation = 'horizontal' if line.p1().y() == line.p2().y() else 'vertical'
-                line_item.orientation = orientation  # Set the orientation
+
+            # Add new lines to the scene
+            for line, orientation in lines:
+                # Ensure that 'line' is a QLineF object and 'orientation' is a string
+                if not isinstance(line, QLineF):
+                    self.logger.error("Invalid line type. Expected QLineF.")
+                    continue
+                if orientation not in ['horizontal', 'vertical']:
+                    self.logger.error(f"Invalid orientation '{orientation}'. Expected 'horizontal' or 'vertical'.")
+                    continue
+
+                # Create a LineItem with the line and its orientation
+                line_item = LineItem(line, orientation=orientation)
+                line_item.setPen(pen)  # Set the pen color
                 self.scene().addItem(line_item)
                 self._line_items.append(line_item)
 
@@ -1192,7 +1414,7 @@ class PDFGraphicsView(QGraphicsView):
             self.logger.info(f"Displayed {len(lines)} table lines for key '{key}'.")
         except Exception as e:
             self.logger.error(f"Error displaying table lines: {e}", exc_info=True)
-            self.get_main_window().show_error_message(f"Failed to display table lines: {e}")
+            self.show_error_message(f"Failed to display table lines: {e}")
 
     def save_lines(self):
         """
@@ -1200,56 +1422,68 @@ class PDFGraphicsView(QGraphicsView):
         After saving, change their color to green.
         """
         try:
-            # Define the key for the current page
-            key = f"{self.current_page_index}_full"
-            
+            # Retrieve the current image filename
+            image_filename = self.get_current_image_filename()
+            if not image_filename:
+                self.logger.error("Current image filename is not set.")
+                self.show_error_message("Failed to retrieve current image filename.")
+                return
+
+            # Define the key using image_filename
+            key = image_filename
+
             # Retrieve automatic lines from self.lines[key]
             automatic_lines = self.lines.get(key, []).copy()  # Use copy to prevent modifying the original list
-            
+
             # Retrieve manual lines from self._line_items
-            manual_lines = [item.line for item in self._line_items]
-            
+            manual_lines = [(item.line, item.orientation) for item in self._line_items]
+
             # Combine automatic and manual lines
             all_lines = automatic_lines + manual_lines
-            
+
             # Save the combined lines back to self.lines[key]
             self.lines[key] = all_lines
-            
-            # Change the color of manual lines to green
+
+            # Change the color of all lines to green
             green_pen = QPen(QColor(0, 255, 0), 1)  # Green pen, 1 pixel wide
             for item in self._line_items:
                 item.setPen(green_pen)
-            
-            # Optionally, if automatic lines are also represented as LineItem objects,
-            # you can change their color similarly. If not, skip this step.
-            # for auto_line_item in self._auto_line_items:
-            #     auto_line_item.setPen(green_pen)
-            
+
             # Log the successful saving of lines
-            self.logger.info(f"All lines on page {self.current_page_index + 1} saved and turned green.")
-            
-            # Optionally, provide user feedback (e.g., status bar message)
+            self.logger.info(f"All lines on {image_filename} saved and turned green.")
+
+            # Provide user feedback (e.g., status bar message)
             main_window = self.get_main_window()
             if main_window:
                 main_window.status_bar.showMessage("Lines saved and turned green.", 5000)
-        
+
+            # Save the updated user lines
+            self.save_user_lines(image_filename, self.lines[key])
+            #self.logger.debug(f"lines[{key}]: {self.lines[key]}")
+
         except Exception as e:
             # Log the error with traceback
             self.logger.error(f"Error saving lines: {e}", exc_info=True)
-            
+
             # Show an error message to the user
             main_window = self.get_main_window()
             if main_window:
                 main_window.show_error_message(f"Failed to save lines: {e}")
 
     def get_lines(self):
-        return [item.line for item in self._line_items]
+        """Return a list of all lines with their orientations."""
+        return [(item.line, item.orientation) for item in self._line_items]
 
     def clear_lines(self):
         """Clear all the lines from the scene."""
         for line_item in self._line_items:
             self.scene().removeItem(line_item)
         self._line_items.clear()
+        # Optionally, clear from the lines dictionary
+        image_filename = self.get_current_image_filename()
+        if image_filename and image_filename in self.lines:
+            del self.lines[image_filename]
+            self.save_user_lines(image_filename, self.lines.get(image_filename, []))
 
 class OCRApp(QMainWindow):
     ocr_completed = pyqtSignal(object)
@@ -1286,6 +1520,7 @@ class OCRApp(QMainWindow):
         self.setAcceptDrops(True)
         self.load_recent_files()
         self.current_page_index = 0
+        self.user_lines = {}  # Store user-added lines
 
         # Signals for OCR processing
         self.ocr_worker = OcrGui()
@@ -1294,7 +1529,8 @@ class OCRApp(QMainWindow):
         self.ocr_worker.ocr_completed.connect(self.on_ocr_completed)
         self.ocr_worker.ocr_error.connect(self.show_error_message)
         self.graphics_view.rectangleSelected.connect(self.on_rectangle_selected)
-
+        self.graphics_view.lineModified.connect(self.on_line_modified)
+    
     def init_ui(self):
         splitter = QSplitter(Qt.Horizontal)
         self.graphics_view = PDFGraphicsView(self)
@@ -1316,7 +1552,6 @@ class OCRApp(QMainWindow):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.progress_bar = None
-
 
         sys.stdout = EmittingStream(textWritten=self.normal_output_written)
         sys.stderr = EmittingStream(textWritten=self.error_output_written)
@@ -1465,15 +1700,16 @@ class OCRApp(QMainWindow):
         tool_bar = QToolBar("Main Toolbar")
         self.addToolBar(Qt.TopToolBarArea, tool_bar)
 
-        # Run OCR
-        self.run_ocr_action = QAction('Run OCR', self)
-        self.run_ocr_action.triggered.connect(self.run_ocr_on_selected_pages)
-        tool_bar.addAction(self.run_ocr_action)
-
         # New action for OCR on selected pages
         self.run_ocr_selected_pages_action = QAction('Page Select', self)
         self.run_ocr_selected_pages_action.triggered.connect(self.run_ocr_on_selected_pages)
         tool_bar.addAction(self.run_ocr_selected_pages_action)
+
+        # Run OCR - Initially Hidden
+        self.run_ocr_action = QAction('Run OCR', self)
+        self.run_ocr_action.triggered.connect(self.run_ocr)
+        self.run_ocr_action.setVisible(False)  # Hide the button initially
+        tool_bar.addAction(self.run_ocr_action)
 
         # Detect Tables Action
         self.detect_tables_action = QAction('Detect Tables', self)
@@ -1620,6 +1856,11 @@ class OCRApp(QMainWindow):
             self.logger.info(f"Window icon set to {icon_path}")
         else:
             self.logger.warning(f"Icon file not found at {icon_path}")
+
+    def update_lines(self, image_filename, lines):
+        """Slot to update self.lines with lines from PDFGraphicsView."""
+        self.lines[image_filename] = lines
+        self.logger.debug(f"Updated lines for {image_filename}: {lines}")
 
     def show_help_tab(self, title, content):
         try:
@@ -1795,7 +2036,7 @@ class OCRApp(QMainWindow):
                     line = QLineF(0.0, float(y_min), float(image_width), float(y_min))
                 else:
                     line = QLineF(0.0, float(y), float(image_width), float(y))
-                lines.append(line)
+                lines.append((line, 'horizontal'))  # Append tuple with orientation
 
             # Draw vertical lines
             for x in vertical_positions:
@@ -1804,14 +2045,14 @@ class OCRApp(QMainWindow):
                     line = QLineF(float(x_min), 0.0, float(x_min), float(image_height))
                 else:
                     line = QLineF(float(x), 0.0, float(x), float(image_height))
-                lines.append(line)
+                lines.append((line, 'vertical'))  # Append tuple with orientation
 
             # Store lines with the correct key (depending on cropped or full image)
             if cropped_index is not None:
                 key = f"{page_index}_{cropped_index}"
             else:
                 key = f"{page_index}_full"
-            self.lines[key] = lines
+            self.lines[key] = lines  # Assign list of tuples
 
             # Ensure the correct image is displayed in the graphics view
             if self.current_page_index != page_index:
@@ -1881,7 +2122,6 @@ class OCRApp(QMainWindow):
         except Exception as e:
             self.logger.error(f"Failed to load PDF: {e}", exc_info=True)
             self.show_error_message(f"Failed to load PDF: {e}")
-
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         self.logger.debug("MainWindow: Drag Enter Event detected.")
@@ -2065,6 +2305,26 @@ class OCRApp(QMainWindow):
             self.logger.error(f"Error detecting intersections: {e}", exc_info=True)
             self.show_error_message(f"Failed to detect table intersections: {e}")
 
+    def determine_orientation(self, line_tuple):
+        try:
+            if isinstance(line_tuple, tuple) and len(line_tuple) == 2:
+                line, orientation = line_tuple
+                if orientation in ['horizontal', 'vertical']:
+                    return orientation
+                else:
+                    # Fallback to calculating orientation if invalid
+                    angle = line.angle()
+                    return 'horizontal' if angle < 45 or angle > 135 else 'vertical'
+            elif isinstance(line_tuple, QLineF):
+                angle = line_tuple.angle()
+                return 'horizontal' if angle < 45 or angle > 135 else 'vertical'
+            else:
+                self.logger.error("Invalid input for determine_orientation.")
+                return 'unknown'
+        except Exception as e:
+            self.logger.error(f"Error determining orientation: {e}", exc_info=True)
+            return 'unknown'
+
     def preview_cropped_image(self, cropped_image):
         """Preview the cropped image in a separate window or UI element."""
         qimage = self.pil_image_to_qimage(cropped_image)
@@ -2076,16 +2336,36 @@ class OCRApp(QMainWindow):
         preview_window.show()
 
     def on_line_modified(self):
-        """Handle the event when a line is modified in the PDFGraphicsView."""
+        """Handle the event when a line is modified in PDFGraphicsView."""
         self.logger.info(f"Line modified on page {self.graphics_view.current_page_index + 1}")
-        self.save_current_lines()
-        self.detect_line_intersections()  # Detect intersections after modification
+        
+        # Save lines from PDFGraphicsView
+        self.save_lines()
+        
+        # Detect intersections or perform other necessary actions
+        self.detect_line_intersections()
+        
+        # Update OCRApp's lines dictionary from PDFGraphicsView
+        image_filename = self.graphics_view.get_current_image_filename()
+        if image_filename:
+            lines = self.graphics_view.get_lines_for_image(image_filename)
+            self.lines[image_filename] = lines
+            #self.logger.debug(f"Updated lines for {image_filename}: {lines}")
 
-    def save_current_lines(self):
-        """Save the current lines for the page."""
-        lines = self.graphics_view.get_lines()
-        self.lines[self.graphics_view.current_page_index] = lines
-        self.logger.info(f"Lines saved for page {self.graphics_view.current_page_index + 1}")
+    def get_user_lines_for_pages(self, selected_pages):
+        """
+        Retrieves user-defined lines for the selected pages from PDFGraphicsView.
+
+        :param selected_pages: List of zero-based page indices.
+        :return: Dictionary mapping image filenames to their respective lines.
+        """
+        user_lines = {}
+        for page_index in selected_pages:
+            if 0 <= page_index < len(self.image_file_paths):
+                image_filename = os.path.basename(self.image_file_paths[page_index])
+                lines = self.graphics_view.get_lines_for_image(image_filename)
+                user_lines[image_filename] = lines
+        return user_lines
 
     def change_page(self, current_item, previous_item):
         """Handle page changes when a different page is selected from the project list."""
@@ -2533,6 +2813,7 @@ class OCRApp(QMainWindow):
     def save_lines(self):
         try:
             self.graphics_view.save_lines()
+            self.logger.info("Lines saved successfully.")
         except Exception as e:
             self.logger.error(f"Error triggering save_lines: {e}", exc_info=True)
             self.show_error_message(f"Failed to save lines: {e}")
@@ -2649,6 +2930,8 @@ class OCRApp(QMainWindow):
             self.show_error_message('Failed to initialize OCR engines.')
             self.logger.error('OCR engines not initialized.')
             return
+        
+        self.logger.debug(f"Received user_lines: {self.user_lines}")
 
         # Validate PDF file path
         if not self.current_pdf_path or not os.path.exists(self.current_pdf_path):
@@ -2679,14 +2962,19 @@ class OCRApp(QMainWindow):
 
         # Save current rectangles and lines (Assuming these methods are defined elsewhere)
         self.save_current_rectangles()
-        self.save_current_lines()
+        self.graphics_view.save_lines()
+
 
         # Initialize the progress bar
         if not self.progress_bar:
             self.progress_bar = QProgressBar()
+            self.progress_bar.setMaximum(len(selected_pages))
+            self.progress_bar.setValue(0)
             self.status_bar.addPermanentWidget(self.progress_bar)
-        self.progress_bar.setMaximum(len(selected_pages))
-        self.progress_bar.setValue(0)
+        else:
+            self.progress_bar.setMaximum(len(selected_pages))
+            self.progress_bar.setValue(0)
+            self.progress_bar.show()  # Ensure it's visible
 
         self.ocr_cancel_event = threading.Event()
 
@@ -2717,20 +3005,27 @@ class OCRApp(QMainWindow):
                 return
             image_list.append(image_path)
 
-        # Extract user-added lines with their orientations for selected pages
+
+        # Retrieve user-added lines from PDFGraphicsView
         user_lines = self.get_user_lines_for_pages(selected_pages)
 
-        # Check if user_lines is correctly structured
+        # Validate user_lines structure
         for image, lines in user_lines.items():
+            self.logger.debug(f"Processing image: {image}")
+            self.logger.debug(f"Lines: {lines}")
             for line, orientation in lines:
                 if not isinstance(line, QLineF):
-                    self.logger.error(f"Invalid line object in {image} for orientation {orientation}.")
+                    self.logger.error(f"Invalid line object in {image}: {line}")
+                    self.show_error_message(f"Invalid line object in {image}.")
+                    continue
                 if orientation not in ['horizontal', 'vertical']:
                     self.logger.error(f"Invalid orientation '{orientation}' in {image}.")
+                    self.show_error_message(f"Invalid orientation '{orientation}' in {image}.")
+                    continue
 
-        self.logger.debug(f"User-added lines for selected pages: {user_lines}")
+        self.logger.debug(f"Final user_lines to be passed to OCRWorker: {user_lines}")
 
-        # Instantiate the OCRWorker thread
+        # Instantiate the OCRWorker thread with user_lines
         self.ocr_worker = OCRWorker(
             pdf_file=self.current_pdf_path,
             storedir=storedir,
@@ -2738,10 +3033,9 @@ class OCRApp(QMainWindow):
             ocr_cancel_event=self.ocr_cancel_event,
             ocr_engine=self.ocr_engine,
             easyocr_engine=self.easyocr_engine,
-            user_lines=user_lines,
-            image_list=image_list  # Pass the list of images to process
+            user_lines=user_lines,  # Pass the user_lines here
+            image_list=image_list
         )
-
         # Connect OCRWorker signals to respective slots
         self.ocr_worker.ocr_progress.connect(self.on_ocr_progress)
         self.ocr_worker.ocr_time_estimate.connect(self.update_remaining_time_label)
@@ -2772,6 +3066,9 @@ class OCRApp(QMainWindow):
                 if not selected_pages:
                     self.show_error_message("No valid pages selected for OCR.")
                     return
+                
+                # Show the "Run OCR" button now that pages are selected
+                self.run_ocr_action.setVisible(True)
 
                 # Run OCR on selected pages
                 self.run_ocr(selected_pages)
@@ -2823,13 +3120,12 @@ class OCRApp(QMainWindow):
             return []
 
     def get_user_lines_for_pages(self, selected_pages):
-        """Retrieve user-added lines for the selected pages."""
         user_lines = {}
         for page_index in selected_pages:
-            page_key = f"{page_index}_full"  # Adjust this if necessary
-            lines = self.graphics_view.lines.get(page_key, [])
-            image_filename = os.path.basename(self.image_file_paths[page_index])
-            user_lines[image_filename] = lines
+            if 0 <= page_index < len(self.image_file_paths):
+                image_filename = os.path.basename(self.image_file_paths[page_index])
+                lines = self.lines.get(image_filename, [])
+                user_lines[image_filename] = lines
         return user_lines
 
     def save_cropped_image(self, cropped_image, crop_rect):
@@ -3142,10 +3438,23 @@ class OCRApp(QMainWindow):
         self.ocr_running = False
         self.run_ocr_action.setText('Run OCR')
         self.save_csv_action.setEnabled(True)
+        self.run_ocr_action.setVisible(False)
 
     def on_ocr_progress(self, tasks_completed, total_tasks):
         self.progress_bar.setValue(tasks_completed)
         self.status_bar.showMessage(f'Processing OCR... ({tasks_completed}/{total_tasks})', 5000)
+
+    def connect_ocr_signals(self):
+        self.ocr_worker.ocr_progress.connect(self.on_ocr_progress)
+        self.ocr_worker.ocr_time_estimate.connect(self.update_remaining_time_label)
+        self.ocr_worker.ocr_completed.connect(self.on_ocr_completed)
+        self.ocr_worker.ocr_error.connect(self.on_ocr_error)
+
+    def disconnect_ocr_signals(self):
+        self.ocr_worker.ocr_progress.disconnect(self.on_ocr_progress)
+        self.ocr_worker.ocr_time_estimate.disconnect(self.update_remaining_time_label)
+        self.ocr_worker.ocr_completed.disconnect(self.on_ocr_completed)
+        self.ocr_worker.ocr_error.disconnect(self.on_ocr_error)
 
     def on_ocr_error(self, error_message):
         """
@@ -3159,15 +3468,13 @@ class OCRApp(QMainWindow):
 
         self.remaining_time_label.setText("Estimated remaining time: N/A")
         self.logger.debug("Remaining time label reset after OCR error.")
-
+        #Disconnect OCR signals to prevent further slot invocations
+        self.disconnect_ocr_signals()
         self.ocr_running = False
         self.run_ocr_action.setText('Run OCR')
+        self.run_ocr_action.setVisible(False)
 
     def cancel_ocr(self):
-        """
-        Cancels the ongoing OCR process by setting the cancellation event.
-        Updates the UI accordingly.
-        """
         if self.ocr_running:
             self.ocr_cancel_event.set()
             self.logger.info("OCR cancellation requested by user.")
@@ -3176,12 +3483,15 @@ class OCRApp(QMainWindow):
             self.ocr_running = False
 
             if self.progress_bar:
-                self.status_bar.removeWidget(self.progress_bar)
-                self.progress_bar = None
+                self.progress_bar.hide()
 
             self.remaining_time_label.setText("Estimated remaining time: N/A")
             self.logger.debug("Remaining time label reset after OCR cancellation.")
 
+            # Disconnect OCR signals to prevent further slot invocations
+            self.disconnect_ocr_signals()
+
+            # Reconnect the run OCR button
             self.run_ocr_action.triggered.disconnect(self.cancel_ocr)
             self.run_ocr_action.triggered.connect(self.run_ocr_on_selected_pages)
         else:
