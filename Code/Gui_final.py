@@ -108,7 +108,7 @@ class LineItem(QGraphicsObject):
         super().__init__(parent)
         self.logger = logging.getLogger(__name__)  # Initialize the logger
         self.orientation = orientation  # 'horizontal' or 'vertical'
-        self._pen = QPen(QColor(0, 0, 255), 1, Qt.SolidLine)  # Blue pen, 1 pixel wide
+        self._pen = QPen(QColor(0, 0, 255), 2, Qt.SolidLine)  # Blue pen, 2 pixels wide
         self.setPen(self._pen)
         self.setFlags(
             QGraphicsObject.ItemIsSelectable |
@@ -116,19 +116,19 @@ class LineItem(QGraphicsObject):
             QGraphicsObject.ItemSendsGeometryChanges
         )
         self.setAcceptHoverEvents(True)
-        self.line = QLineF(line)  # Store the line as an attribute
-        self.previous_line = QLineF(line)  # Initialize previous_line with the initial line position
+        self._line = QLineF(line)  # Store the line as an attribute
+        self._previous_line = QLineF(line)  # Initialize previous_line with the initial line position
         self.image_filename = image_filename  # Associate the line with an image
 
     def boundingRect(self):
-        pen_width = self._pen.width()
+        pen_width = self._pen.widthF()
         extra = pen_width / 2.0
-        return QRectF(self.line.p1(), self.line.p2()).normalized().adjusted(-extra, -extra, extra, extra)
+        return QRectF(self._line.p1(), self._line.p2()).normalized().adjusted(-extra, -extra, extra, extra)
 
     def paint(self, painter, option, widget=None):
         try:
             painter.setPen(self._pen)
-            painter.drawLine(self.line)
+            painter.drawLine(self._line)
         except Exception as e:
             self.logger.error(f"Error in LineItem paint: {e}", exc_info=True)
 
@@ -136,63 +136,81 @@ class LineItem(QGraphicsObject):
         self._pen = pen
         self.update()
 
+    @property
+    def line(self):
+        return self._line
+
+    @line.setter
+    def line(self, new_line):
+        self._line = new_line
+        self.update()
+
     def itemChange(self, change, value):
         if change == QGraphicsObject.ItemPositionChange:
+            # Calculate the movement delta
             new_pos = value
             delta = new_pos - self.pos()
-            # Update the line position based on orientation
+
+            # Depending on orientation, adjust the line's position
             if self.orientation == 'horizontal':
+                # Move only vertically
                 new_line = QLineF(
-                    self.line.p1().x(),
-                    self.line.p1().y() + delta.y(),
-                    self.line.p2().x(),
-                    self.line.p2().y() + delta.y()
+                    self._line.p1().x(),
+                    self._line.p1().y() + delta.y(),
+                    self._line.p2().x(),
+                    self._line.p2().y() + delta.y()
                 )
                 # Prevent horizontal movement by resetting the x position
                 new_pos.setX(self.pos().x())
             elif self.orientation == 'vertical':
+                # Move only horizontally
                 new_line = QLineF(
-                    self.line.p1().x() + delta.x(),
-                    self.line.p1().y(),
-                    self.line.p2().x() + delta.x(),
-                    self.line.p2().y()
+                    self._line.p1().x() + delta.x(),
+                    self._line.p1().y(),
+                    self._line.p2().x() + delta.x(),
+                    self._line.p2().y()
                 )
                 # Prevent vertical movement by resetting the y position
                 new_pos.setY(self.pos().y())
             else:
+                # Allow free movement
                 new_line = QLineF(
-                    self.line.p1().x() + delta.x(),
-                    self.line.p1().y() + delta.y(),
-                    self.line.p2().x() + delta.x(),
-                    self.line.p2().y() + delta.y()
+                    self._line.p1().x() + delta.x(),
+                    self._line.p1().y() + delta.y(),
+                    self._line.p2().x() + delta.x(),
+                    self._line.p2().y() + delta.y()
                 )
-            
+
             # Emit the moved signal with old and new lines
-            self.moved.emit(QLineF(self.previous_line), QLineF(new_line))
-            
+            self.moved.emit(QLineF(self._previous_line), QLineF(new_line))
+
             # Update the line and previous_line
-            self.line = new_line
-            self.previous_line = QLineF(new_line)
+            self._line = new_line
+            self._previous_line = QLineF(new_line)
             self.update()
+
             return new_pos
         return super().itemChange(change, value)
 
 class RectItem(QGraphicsObject):
-    moved = pyqtSignal(QRectF)
+    moved = pyqtSignal(QRectF)  # Signal emitted when the rectangle is moved
 
-    def __init__(self, rect, parent=None):
+    def __init__(self, rect, parent=None, image_filename=None):
         super().__init__(parent)
         self.logger = logging.getLogger(__name__) 
         self._rect = QRectF(rect)
-        self._pen = QPen(QColor(255, 0, 0), 2)  # Red pen
+        self._pen = QPen(QColor(255, 0, 0), 2)  # Red pen, 2 pixels wide
+        self.setPen(self._pen)
         self.setFlags(
-            QGraphicsItem.ItemIsSelectable |
-            QGraphicsItem.ItemIsMovable |
-            QGraphicsItem.ItemSendsGeometryChanges
+            QGraphicsObject.ItemIsSelectable |
+            QGraphicsObject.ItemIsMovable |
+            QGraphicsObject.ItemSendsGeometryChanges
         )
+        self.setAcceptHoverEvents(True)
+        self.image_filename = image_filename  # Associate the rectangle with an image
 
     def boundingRect(self):
-        pen_width = self._pen.width()
+        pen_width = self._pen.widthF()
         extra = pen_width / 2.0
         return self._rect.normalized().adjusted(-extra, -extra, extra, extra)
 
@@ -203,23 +221,34 @@ class RectItem(QGraphicsObject):
         except Exception as e:
             self.logger.error(f"Error in RectItem paint: {e}", exc_info=True)
 
-    def setRect(self, rect):
-        self.prepareGeometryChange()
-        self._rect = QRectF(rect)
+    def setPen(self, pen):
+        self._pen = pen
         self.update()
 
+    @property
     def rect(self):
         return self._rect
 
+    @rect.setter
+    def rect(self, new_rect):
+        self.prepareGeometryChange()
+        self._rect = QRectF(new_rect)
+        self.update()
+
     def itemChange(self, change, value):
-        if change == QGraphicsItem.ItemPositionChange:
+        if change == QGraphicsObject.ItemPositionChange:
             # Calculate the movement delta
-            delta = value - self.pos()
+            new_pos = value
+            delta = new_pos - self.pos()
+
             # Update the rectangle position
             new_rect = self._rect.translated(delta)
-            self.setRect(new_rect)
-            self.moved.emit(new_rect)
-            return value
+            self.rect = new_rect  # Use the setter to update
+
+            # Emit the moved signal with the new rectangle
+            self.moved.emit(QRectF(new_rect))
+
+            return new_pos  # Allow the position change
         return super().itemChange(change, value)
 
 class Action:
@@ -246,18 +275,26 @@ class AddLineAction(QUndoCommand):
         self.app.graphics_view._line_items.append(self.line_item)
         self.app.logger.info("Redo add: Line added.")
 
-class AddRectangleAction(Action):
+class AddRectangleAction(QUndoCommand):
     def __init__(self, view, rect_item):
+        super().__init__("Add Rectangle")
         self.view = view
         self.rect_item = rect_item
 
     def undo(self):
         self.view.scene().removeItem(self.rect_item)
         self.view._rect_items.remove(self.rect_item)
+        self.view.lines.pop(self.rect_item.image_filename, None)
+        self.view.logger.info("Undo add: Rectangle removed.")
 
     def redo(self):
         self.view.scene().addItem(self.rect_item)
         self.view._rect_items.append(self.rect_item)
+        if self.rect_item.image_filename:
+            if self.rect_item.image_filename not in self.view.lines:
+                self.view.lines[self.rect_item.image_filename] = []
+            # Optionally, store rectangle details if needed
+        self.view.logger.info("Redo add: Rectangle added.")
 
 class RemoveLineAction:
     """Represents an undoable action for removing a line."""
@@ -388,24 +425,12 @@ class OcrGui(QObject):
     ocr_error = pyqtSignal(str)
 
 class OCRWorker(QThread):
-    # Updated signals to include remaining time (in seconds)
     ocr_progress = pyqtSignal(int, int)
-    ocr_time_estimate = pyqtSignal(float)  # New signal for remaining time
+    ocr_time_estimate = pyqtSignal(float)
     ocr_completed = pyqtSignal(object)
     ocr_error = pyqtSignal(str)
 
     def __init__(self, pdf_file, storedir, output_csv, ocr_cancel_event, ocr_engine, easyocr_engine, user_lines=None):
-        """
-        Initialize the OCRWorker.
-
-        :param pdf_file: Path to the PDF file.
-        :param storedir: Directory to store intermediate images.
-        :param output_csv: Path to the output CSV file.
-        :param ocr_cancel_event: Event to handle cancellation.
-        :param ocr_engine: OCR engine instance.
-        :param easyocr_engine: EasyOCR engine instance.
-        :param user_lines: Dictionary mapping image filenames to lists of tuples (QLineF, orientation).
-        """
         super().__init__()
         self.pdf_file = pdf_file
         self.storedir = storedir
@@ -413,186 +438,131 @@ class OCRWorker(QThread):
         self.ocr_cancel_event = ocr_cancel_event
         self.ocr_engine = ocr_engine
         self.easyocr_engine = easyocr_engine
-        self.user_lines = user_lines if user_lines else {}  # Initialize user_lines
+        self.user_lines = user_lines if user_lines else {}
         self.logger = logging.getLogger(self.__class__.__name__)
-
-        # Initialize timing variables
-        self.total_start_time = None
-        self.cell_times = deque(maxlen=5)  # To store last 5 cell processing times
+        self.cell_times = deque(maxlen=20)
 
     def run(self):
         try:
             self.logger.info("OCR process started.")
+            start_time = time.time()
 
-            self.total_start_time = time.time()  # Start total OCR timer
-
-            # Validate PDF file path
+            # Validate paths
             if not self.pdf_file or not os.path.exists(self.pdf_file):
                 raise ValueError("Invalid or missing PDF file path.")
-
-            # Validate storedir
             if not self.storedir or not os.path.exists(self.storedir):
                 raise ValueError("Invalid or missing storage directory.")
-
-            # Validate output_csv directory
             output_dir = os.path.dirname(self.output_csv)
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir, exist_ok=True)
-                self.logger.info(f"Created output directory: {output_dir}")
+            os.makedirs(output_dir, exist_ok=True)
 
             # Convert PDF to images
             self.logger.info("Converting PDF to images.")
             image_list = ocr_module.convert_pdf_to_images(self.pdf_file, self.storedir)
-
             if self.ocr_cancel_event.is_set():
-                self.logger.info("OCR process cancelled after converting PDF to images.")
-                return
+                self.emit_cancellation()
 
-            # Detect tables and cellularize
+            # Detect tables in images
             self.logger.info("Detecting tables in images.")
             auto_TableMap = ocr_module.detect_tables_in_images(image_list)
-
             if self.ocr_cancel_event.is_set():
-                self.logger.info("OCR process cancelled after table detection.")
-                return
+                self.emit_cancellation()
 
-            # Ensure auto_TableMap is a list and has the same length as image_list
-            if isinstance(auto_TableMap, list):
-                if len(auto_TableMap) != len(image_list):
-                    raise ValueError("Mismatch between number of images and detected table maps.")
-                self.logger.debug("auto_TableMap is a list with correct length.")
-            elif isinstance(auto_TableMap, dict):
-                # If auto_TableMap is a dict, convert it to a list maintaining order
+            # Ensure auto_TableMap is a list with correct length
+            if isinstance(auto_TableMap, dict):
                 auto_TableMap = [auto_TableMap.get(image, [[], []]) for image in image_list]
-                self.logger.debug("Converted auto_TableMap from dict to list.")
-            else:
-                raise TypeError("detect_tables_in_images must return a list or dictionary.")
+            elif not (isinstance(auto_TableMap, list) and len(auto_TableMap) == len(image_list)):
+                raise ValueError("Mismatch between number of images and detected table maps.")
 
-            # Incorporate user-added lines into table detection
+            # Merge user-added lines
             self.logger.info("Incorporating user-added lines into table detection.")
             combined_TableMap = self._merge_user_lines(auto_TableMap, image_list)
 
             if self.ocr_cancel_event.is_set():
-                self.logger.info("OCR process cancelled after merging user lines.")
-                return
+                self.emit_cancellation()
 
-            # Validate combined_TableMap structure
-            for idx, Table in enumerate(combined_TableMap):
-                if not isinstance(Table, list) or len(Table) != 2:
+            # Validate combined_TableMap
+            for idx, (columns, rows) in enumerate(combined_TableMap):
+                if not (isinstance(columns, list) and isinstance(rows, list)):
                     raise ValueError(f"Invalid table structure for image {image_list[idx]} at index {idx}.")
-                columns, rows = Table
-                if not isinstance(columns, list) or not isinstance(rows, list):
-                    raise ValueError(f"Columns and rows must be lists for image {image_list[idx]} at index {idx}.")
                 if len(columns) < 2 or len(rows) < 2:
                     raise ValueError(f"Insufficient number of columns or rows for image {image_list[idx]} at index {idx}.")
 
+            # Cellularize images
             self.logger.info("Cellularizing images based on combined table detection.")
             locationlists = ocr_module.cellularize_images(image_list, combined_TableMap)
-
             if self.ocr_cancel_event.is_set():
-                self.logger.info("OCR process cancelled after cellularizing images.")
-                return
+                self.emit_cancellation()
 
-            # Flatten the list of image filenames
             all_filenames = [filename for collection in locationlists for filename in collection]
-            self.logger.info(f"Total cell images to process: {len(all_filenames)}")
+            total_images = len(all_filenames)
+            self.logger.info(f"Total cell images to process: {total_images}")
 
             if not all_filenames:
                 raise ValueError("No cell images found for OCR processing.")
 
-            # Process images with OCR and emit progress
+            # OCR Processing
             self.logger.info("Starting OCR processing on cell images.")
-            total_images = len(all_filenames)
             results = []
             for idx, filename in enumerate(all_filenames, start=1):
                 if self.ocr_cancel_event.is_set():
-                    self.logger.info("OCR process cancelled during image processing.")
-                    return
+                    self.emit_cancellation()
 
-                cell_start_time = time.time()  # Start timer for individual cell
-
+                cell_start = time.time()
                 result = ocr_module.process_image(filename, self.ocr_engine, self.easyocr_engine)
-                if result is not None:
+                if result:
                     results.append(result)
-
-                cell_end_time = time.time()
-                cell_duration = cell_end_time - cell_start_time
+                cell_duration = time.time() - cell_start
                 self.cell_times.append(cell_duration)
-                self.logger.debug(f"Processed {filename} in {cell_duration:.2f} seconds.")
-
-                # Calculate running average of last 5 cell processing times
-                if len(self.cell_times) == 0:
-                    average_time = 0
-                else:
-                    average_time = sum(self.cell_times) / len(self.cell_times)
+                #self.logger.debug(f"Processed {filename} in {cell_duration:.2f} seconds.")
 
                 # Estimate remaining time
-                remaining_images = total_images - idx
-                remaining_time = remaining_images * average_time
+                average_time = sum(self.cell_times) / len(self.cell_times) if self.cell_times else 0
+                remaining_time = (total_images - idx) * average_time
 
                 # Emit progress and remaining time
                 self.ocr_progress.emit(idx, total_images)
                 self.ocr_time_estimate.emit(remaining_time)
 
-                #self.logger.debug(f"Progress: {idx}/{total_images}, Estimated remaining time: {remaining_time:.2f} seconds.")
-
             if self.ocr_cancel_event.is_set():
-                self.logger.info("OCR process cancelled after image processing.")
-                return
+                self.emit_cancellation()
 
-            # Process the results
+            # Process OCR results
             self.logger.info("Processing OCR results.")
             table_data, total, bad, easyocr_count, paddleocr_count, low_confidence_results = ocr_module.process_results(results)
 
-            # Write results to CSV
+            # Write to CSV
             self.logger.info(f"Writing OCR results to CSV: {self.output_csv}")
             ocr_module.write_results_to_csv(table_data, self.output_csv)
-
-            # Emit completion signal with results
-            self.ocr_completed.emit((table_data, total, bad, easyocr_count, paddleocr_count, low_confidence_results))
+            processing_time = time.time() - start_time
+            # Emit completion signal
+            self.ocr_completed.emit((table_data, total, bad, easyocr_count, paddleocr_count, low_confidence_results, processing_time))
             self.logger.info("OCR process completed successfully.")
-
-            # Log total processing time
-            total_end_time = time.time()
-            total_duration = total_end_time - self.total_start_time
-            self.logger.info(f"Total OCR processing time: {total_duration:.2f} seconds.")
+            self.logger.info(f"Total OCR processing time: {time.time() - start_time:.2f} seconds.")
 
         except Exception as e:
             self.logger.error(f"OCR process failed: {e}", exc_info=True)
             self.ocr_error.emit(f"Critical error: {e}")
 
     def _merge_user_lines(self, auto_TableMap, image_list):
-        """
-        Merge user-added lines with auto-detected TableMap.
-
-        :param auto_TableMap: List of [columns, rows] per image.
-        :param image_list: List of image filenames.
-        :return: Combined TableMap with user lines.
-        """
         combined_TableMap = []
-
-        for idx, image in enumerate(image_list):
-            auto_columns, auto_rows = auto_TableMap[idx]
+        for image, auto_map in zip(image_list, auto_TableMap):
             user_lines = self.user_lines.get(image, [])
-
-            # Separate user lines based on orientation
             user_columns = [line for line, orientation in user_lines if orientation == 'vertical']
             user_rows = [line for line, orientation in user_lines if orientation == 'horizontal']
-
-            # Combine auto-detected and user-added lines
-            combined_columns = auto_columns + user_columns
-            combined_rows = auto_rows + user_rows
-
+            combined_columns = auto_map[0] + user_columns
+            combined_rows = auto_map[1] + user_rows
             combined_TableMap.append([combined_columns, combined_rows])
-
-            self.logger.debug(f"Merged {len(user_columns)} user columns and {len(user_rows)} user rows with {len(auto_columns)} auto columns and {len(auto_rows)} auto rows for image {image}.")
-
+            self.logger.debug(
+                f"Merged {len(user_columns)} user columns and {len(user_rows)} user rows "
+                f"with {len(auto_map[0])} auto columns and {len(auto_map[1])} auto rows for image {image}."
+            )
         return combined_TableMap
 
-    def cancel(self):
-        """Method to cancel the OCR process."""
-        self.ocr_cancel_event.set()
-        self.logger.info("OCR cancellation requested.")
+    def emit_cancellation(self):
+        """Emits an OCR cancellation signal and stops processing."""
+        self.logger.info("OCR process cancelled by user.")
+        self.ocr_error.emit("OCR process was cancelled by the user.")
+        self.quit()
 
 class PDFGraphicsView(QGraphicsView):
     rectangleSelected = pyqtSignal(QRectF)
@@ -621,6 +591,7 @@ class PDFGraphicsView(QGraphicsView):
         self.adding_horizontal_line = False
         self.manual_table_detection_mode = False
         self.lines = {}
+        self.current_image_filename = None
 
         try:
             self.rectangleSelected.connect(self.get_main_window().on_rectangle_selected)
@@ -673,6 +644,12 @@ class PDFGraphicsView(QGraphicsView):
             self.logger.info("Horizontal Line Mode deactivated.")
             self.status_bar_message("Horizontal Line Mode Disabled.")
     
+    def set_current_image_filename(self, filename):
+        self.current_image_filename = filename
+
+    def get_current_image_filename(self):
+        return self.current_image_filename
+    
     def add_line(self, start_point, end_point, orientation=None):
         """
         Add a straight line from start_point to end_point, extending from edge to edge.
@@ -723,11 +700,26 @@ class PDFGraphicsView(QGraphicsView):
             # Retrieve the main window instance
             main_window = self.get_main_window()
             if main_window:
+                # Get current image filename (ensure it returns the base filename)
+                current_image_filename = self.get_current_image_filename()
+                if not current_image_filename:
+                    self.logger.error("Current image filename not found. Cannot associate line with image.")
+                    self.show_error_message("Internal Error: Current image not found.")
+                    return
+
+                # Initialize the list for the current image if not present
+                if current_image_filename not in self.lines:
+                    self.lines[current_image_filename] = []
+
+                # Append the new line to the lines dictionary
+                self.lines[current_image_filename].append((QLineF(start_point, end_point), orientation))
+
                 # Create and push AddLineAction to undo stack
                 action = AddLineAction(main_window, line_item)
                 self.undo_stack.append(action)
                 self.redo_stack.clear()
                 self.lineModified.emit()
+
                 self.logger.info(f"Line added from {start_point} to {end_point}, Orientation: {orientation}")
             else:
                 self.logger.error("Main window instance not found. Cannot add line.")
@@ -782,14 +774,24 @@ class PDFGraphicsView(QGraphicsView):
             if main_window:
                 main_window.show_error_message(f"Failed to remove line: {e}")
 
+    def get_user_lines(self):
+        return self.lines.copy()
+    
     def add_rectangle(self, rect):
-        """Add a rectangle to the scene."""
+        """Add a RectItem to the scene."""
         try:
-            rect_item = RectItem(rect)
+            # Create a RectItem with the specified rectangle and associate it with the current image
+            current_image_filename = self.get_current_image_filename()
+            if not current_image_filename:
+                self.logger.error("Current image filename not found. Cannot associate rectangle with image.")
+                self.show_error_message("Internal Error: Current image not found.")
+                return
+
+            rect_item = RectItem(rect, image_filename=current_image_filename)
             self.scene().addItem(rect_item)
             self._rect_items.append(rect_item)
 
-            # Connect the moved signal
+            # Connect the moved signal to handle rectangle movements
             rect_item.moved.connect(lambda new_rect, item=rect_item: self.on_rect_moved(item, new_rect))
 
             # Create and push AddRectangleAction to undo stack
@@ -797,25 +799,39 @@ class PDFGraphicsView(QGraphicsView):
             self.undo_stack.append(action)
             self.redo_stack.clear()  # Clear redo stack on new action
 
+            self.lineModified.emit()
             self.logger.info(f"Rectangle added: {rect}")
         except Exception as e:
             self.logger.error(f"Error adding rectangle: {e}", exc_info=True)
-            self.get_main_window().show_error_message(f"Failed to add rectangle: {e}")
+            self.show_error_message(f"Failed to add rectangle: {e}")
 
     def on_rect_moved(self, rect_item, new_rect):
-        """Handle the movement of a rectangle item."""
+        """Handle the movement of a RectItem."""
         try:
             # Capture the previous rectangle position
-            previous_rect = rect_item._previous_rect
-            # Create MoveRectangleAction
+            previous_rect = rect_item.rect
+
+            # Create MoveRectangleAction for undo functionality
             action = MoveRectangleAction(self, rect_item, previous_rect, new_rect)
             self.undo_stack.append(action)
             self.redo_stack.clear()
             self.lineModified.emit()
             self.logger.info(f"Rectangle moved from {previous_rect} to {new_rect}")
+
+            # Update the user_rects dictionary
+            image_filename = rect_item.image_filename
+            if image_filename and image_filename in self.lines:
+                try:
+                    # Remove the old rectangle
+                    self.lines[image_filename].remove(previous_rect)
+                    # Add the new rectangle
+                    self.lines[image_filename].append(new_rect)
+                    self.logger.debug(f"Updated rectangles for {image_filename}: {self.lines[image_filename]}")
+                except ValueError:
+                    self.logger.warning(f"Rectangle {previous_rect} not found in lines[{image_filename}].")
         except Exception as e:
             self.logger.error(f"Error handling rectangle movement: {e}", exc_info=True)
-            self.get_main_window().show_error_message(f"Failed to move rectangle: {e}")
+            self.show_error_message(f"Failed to move rectangle: {e}")
 
     def remove_rectangle(self, rect_item):
         """Remove a specified rectangle_item."""
@@ -836,53 +852,31 @@ class PDFGraphicsView(QGraphicsView):
             self.logger.error(f"Error removing rectangle: {e}", exc_info=True)
             self.get_main_window().show_error_message(f"Failed to remove rectangle: {e}")
 
-    def next_page(self):
-        """Navigate to the next page of the PDF."""
-        try:
-            if self.pdf_images and self.current_page_index + 1 < len(self.pdf_images):
-                self.current_page_index += 1
-                self.load_image(self.pdf_images[self.current_page_index])
-                self.get_main_window().update_page_label(self.current_page_index)
-            else:
-                self.logger.warning("No next page available.")
-        except Exception as e:
-            self.logger.error(f"Error in next_page: {e}")
-            self.get_main_window().show_error_message(f"An error occurred: {e}")
-
-    def previous_page(self):
-        """Navigate to the previous page of the PDF."""
-        try:
-            if self.pdf_images and self.current_page_index - 1 >= 0:
-                self.current_page_index -= 1
-                self.load_image(self.pdf_images[self.current_page_index])
-                self.get_main_window().update_page_label(self.current_page_index)
-            else:
-                self.logger.warning("No previous page available.")
-        except Exception as e:
-            self.logger.error(f"Error in previous_page: {e}")
-            self.get_main_window().show_error_message(f"An error occurred: {e}")
-   
-    def load_image(self, qimage):
-        """Load a QImage into the scene."""
+    def load_image(self, image):
+        """Load and display the given image in the graphics view."""
         try:
             self.scene().clear()
-            qt_pixmap = QPixmap.fromImage(qimage)
-            if qt_pixmap.isNull():
-                raise ValueError("Failed to convert QImage to QPixmap.")
-            self._pixmap_item = QGraphicsPixmapItem(qt_pixmap)
-            self.scene().addItem(self._pixmap_item)
-            self.fitInView(self._pixmap_item, Qt.KeepAspectRatio)
-            self._rect_items.clear()
-            self._line_items.clear()
-
-            # Reset any transformations
-            self._pixmap_item.setRotation(0)
-            self._pixmap_item.setScale(1)
-
-            self.logger.info("Image loaded into PDFGraphicsView successfully.")
+            self._rect_items = []
+            self._line_items = []
+            # Assuming 'image' is a QImage or QPixmap
+            if isinstance(image, QImage):
+                pixmap = QPixmap.fromImage(image)
+            elif isinstance(image, QPixmap):
+                pixmap = image
+            else:
+                self.logger.error("Invalid image type passed to load_image.")
+                self._image_loaded = False
+                self._pixmap_item = None  # Ensure _pixmap_item is None on failure
+                return
+            # Add the pixmap to the scene and keep a reference to it
+            self._pixmap_item = self.scene().addPixmap(pixmap)
+            self.fitInView(self.sceneRect(), Qt.KeepAspectRatio)
+            self._image_loaded = True  # Indicate that an image has been loaded
+            self.logger.debug(f"Image loaded successfully in PDFGraphicsView. Pixmap item: {self._pixmap_item}")
         except Exception as e:
-            self.logger.error(f"Error loading image into scene: {e}", exc_info=True)
-            self.get_main_window().show_error_message(f"An error occurred while loading image: {e}")
+            self.logger.error(f"Error loading image in PDFGraphicsView: {e}", exc_info=True)
+            self._image_loaded = False
+            self._pixmap_item = None  # Ensure _pixmap_item is None on failure
 
     def mousePressEvent(self, event):
         try:
@@ -987,9 +981,9 @@ class PDFGraphicsView(QGraphicsView):
             if event.modifiers() & Qt.ControlModifier:
                 angle = event.angleDelta().y()
                 if angle > 0:
-                    self.get_main_window.zoom_in()
+                    self.get_main_window().zoom_in
                 elif angle < 0:
-                    self.get_main_window.zoom_out()
+                    self.get_main_window().zoom_out
                 event.accept()
             else:
                 super().wheelEvent(event)
@@ -1039,9 +1033,9 @@ class PDFGraphicsView(QGraphicsView):
             elif event.key() == Qt.Key_Y and event.modifiers() & Qt.ControlModifier:
                 self.redo_last_action()
             elif event.key() == Qt.Key_Right:
-                self.next_page()
+                self.get_main_window().next_page()
             elif event.key() == Qt.Key_Left:
-                self.previous_page()
+                self.get_main_window().previous_page()
             else:
                 super().keyPressEvent(event)
         except Exception as e:
@@ -1094,7 +1088,7 @@ class PDFGraphicsView(QGraphicsView):
     def display_lines(self, lines, key=None):
         """Display detected table lines on the image."""
         try:
-            if not hasattr(self, '_pixmap_item') or not self._pixmap_item:
+            if not hasattr(self, '_pixmap_item') or self._pixmap_item is None:
                 raise RuntimeError("No image loaded in PDFGraphicsView to display lines on.")
 
             pen = QPen(QColor(0, 255, 0), 1)  # Green lines, 1 pixel wide
@@ -1254,8 +1248,7 @@ class OCRApp(QMainWindow):
         self.qimages = []
         self.setAcceptDrops(True)
         self.load_recent_files()
-
-
+        self.current_page_index = 0
 
         # Signals for OCR processing
         self.ocr_worker = OcrGui()
@@ -1284,6 +1277,8 @@ class OCRApp(QMainWindow):
         self.init_tool_bar()
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
+        self.progress_bar = None
+
 
         sys.stdout = EmittingStream(textWritten=self.normal_output_written)
         sys.stderr = EmittingStream(textWritten=self.error_output_written)
@@ -1376,12 +1371,12 @@ class OCRApp(QMainWindow):
         # Navigation: Previous Page and Next Page
         prev_action = QAction('Previous Page', self)
         prev_action.setShortcut('Ctrl+Left')
-        prev_action.triggered.connect(self.graphics_view.previous_page)
+        prev_action.triggered.connect(self.previous_page)
         view_menu.addAction(prev_action)
 
         next_action = QAction('Next Page', self)
         next_action.setShortcut('Ctrl+Right')
-        next_action.triggered.connect(self.graphics_view.next_page)
+        next_action.triggered.connect(self.next_page)
         view_menu.addAction(next_action)
 
         # Text Size Submenu
@@ -1432,21 +1427,16 @@ class OCRApp(QMainWindow):
         tool_bar = QToolBar("Main Toolbar")
         self.addToolBar(Qt.TopToolBarArea, tool_bar)
 
-        # Initialize OCR
-        self.init_ocr_action = QAction('Initialize OCR', self)
-        self.init_ocr_action.triggered.connect(self.initialize_ocr_engines)
-        tool_bar.addAction(self.init_ocr_action)
-
-        # Detect Tables Action
-        self.detect_tables_action = QAction('Detect Tables', self)
-        self.detect_tables_action.triggered.connect(self.detect_tables)
-        self.detect_tables_action.setEnabled(False)
-        tool_bar.addAction(self.detect_tables_action)
-
         # Run OCR
         self.run_ocr_action = QAction('Run OCR', self)
         self.run_ocr_action.triggered.connect(self.run_ocr)
         tool_bar.addAction(self.run_ocr_action)
+
+        # Detect Tables Action
+        self.detect_tables_action = QAction('Detect Tables', self)
+        self.detect_tables_action.triggered.connect(self.detect_tables)
+        self.detect_tables_action.setEnabled(True)
+        tool_bar.addAction(self.detect_tables_action)
 
         # Cropping Mode Toggle
         self.cropping_mode_action = QAction('Cropping Mode', self)
@@ -1645,7 +1635,7 @@ class OCRApp(QMainWindow):
         minutes, seconds = divmod(int(remaining_time), 60)
         time_str = f"Estimated remaining time: {minutes}m {seconds}s"
         self.remaining_time_label.setText(time_str)
-        self.logger.debug(f"Updated remaining_time_label: {time_str}")
+        #self.logger.debug(f"Updated remaining_time_label: {time_str}")
 
     def set_table_detection_method(self, method_name):
         self.table_detection_method = method_name
@@ -1711,31 +1701,22 @@ class OCRApp(QMainWindow):
                 self.show_error_message("No item selected for table detection.")
                 return
 
-            selected_text = current_item.text(0)  # Specify the column index
+            selected_text = current_item.text(0)
 
-            # Determine if the selected item is a Page, Image, or Cropped image
-            if selected_text.startswith("Page") or selected_text.startswith("Image"):
-                # Extract page or image index
-                index = int(selected_text.split(" ")[1]) - 1
-                is_pdf = selected_text.startswith("Page")
-                image_path = self.image_file_paths[index]
-                self.perform_table_detection(image_path, page_index=index, is_pdf=is_pdf, cropped_index=None)
+            # Get the image path from the item data
+            image_path = current_item.data(0, Qt.UserRole)
+            if not image_path or not os.path.exists(image_path):
+                self.show_error_message("Image file not found for the selected item.")
+                return
+
+            # Determine if the selected item is a Page or Cropped image
+            if selected_text.startswith("Page"):
+                page_index = int(selected_text.split(" ")[1]) - 1
+                self.perform_table_detection(image_path, page_index=page_index, is_pdf=False, cropped_index=None)
 
             elif selected_text.startswith("Cropped"):
-                # Extract parent page index and cropped index
-                parent_item = current_item.parent()
-                if not parent_item:
-                    self.show_error_message("Cropped item has no parent page.")
-                    return
-
-                parent_text = parent_item.text(0)
-                page_index = int(parent_text.split(" ")[1]) - 1
-
-                # Extract cropped index
-                cropped_text = selected_text.split(":")[0]  # e.g., "Cropped 1"
-                cropped_index = int(cropped_text.split(" ")[1]) - 1
-                image_path = self.cropped_images[page_index][cropped_index]
-                self.perform_table_detection(image_path, page_index=page_index, is_pdf=False, cropped_index=cropped_index)
+                # Handle cropped images (similar logic can be applied)
+                pass  # Implement as needed
 
             else:
                 self.show_error_message("Invalid selection for table detection.")
@@ -1789,6 +1770,18 @@ class OCRApp(QMainWindow):
                 key = f"{page_index}_full"
             self.lines[key] = lines
 
+            # Ensure the correct image is displayed in the graphics view
+            if self.current_page_index != page_index:
+                self.current_page_index = page_index
+                self.show_current_page()
+
+            # Load the image into the graphics view (if not already loaded)
+            if not self.graphics_view._image_loaded:
+                # Convert PIL image to QImage
+                pil_image = self.pil_images[page_index]
+                qimage = pil_image.convert("RGBA").toqimage()
+                self.graphics_view.load_image(qimage)
+
             # Display the detected lines in the graphics view
             self.graphics_view.display_lines(lines, key=key)
 
@@ -1804,22 +1797,130 @@ class OCRApp(QMainWindow):
                 self.logger.error(f"Table detection on {'page' if is_pdf else 'image'} {page_index + 1} failed: {e}", exc_info=True)
 
     def open_pdf(self):
+        """Opens a PDF file, processes it into images, updates the project list, and selects the first page."""
         options = QFileDialog.Options()
         file_name, _ = QFileDialog.getOpenFileName(
             self, 
-            "Open File", 
+            "Open PDF", 
             "", 
-            "PDF Files (*.pdf);;Image Files (*.png);;All Files (*)", 
+            "PDF Files (*.pdf);;All Files (*)", 
             options=options
         )
         if file_name:
-            self.process_files([file_name])
-            self.update_recent_files(file_name)
-            self.current_pdf_path = file_name  # Ensure this assignment exists
-            self.logger.info(f"PDF file selected: {file_name}")
+            try:
+                self.current_pdf_path = file_name
+                self.logger.info(f"PDF file selected: {file_name}")
+
+                # Set the project folder based on the PDF name
+                pdf_name = os.path.splitext(os.path.basename(file_name))[0]
+                self.project_folder = os.path.join(os.getcwd(), pdf_name)
+                os.makedirs(self.project_folder, exist_ok=True)
+
+                # Process the PDF into images and save them in temp_images directory
+                self.process_pdf_to_images(file_name)
+
+                # Update recent files list
+                self.update_recent_files(file_name)
+
+                # Update project explorer
+                self.update_project_explorer()
+
+                # Select the first page in the project list
+                self.select_first_page(pdf_name)
+
+            except Exception as e:
+                self.logger.error(f"Failed to open PDF: {e}", exc_info=True)
+                self.show_error_message(f"Failed to open PDF: {e}")
         else:
             self.logger.warning("No file selected.")
 
+    def process_pdf_to_images(self, pdf_path):
+        """Processes the PDF into images and saves them in the project folder."""
+        try:
+            image_dir = os.path.join(self.project_folder, 'temp_images')
+            os.makedirs(image_dir, exist_ok=True)
+
+            # Use pdf2image to convert PDF pages to images
+            from pdf2image import convert_from_path
+            images = convert_from_path(pdf_path)
+            self.image_file_paths = []
+            self.pil_images = []  # Initialize the list to store PIL images
+
+            for i, page_image in enumerate(images):
+                image_path = os.path.join(image_dir, f'page_{i + 1}.png')
+                page_image.save(image_path, 'PNG')
+                self.image_file_paths.append(image_path)
+                self.pil_images.append(page_image)  # Add the PIL image to the list
+
+                self.logger.debug(f"Saved image: {image_path}")
+
+            self.logger.debug(f"Total images processed: {len(self.pil_images)}")
+
+            self.logger.info(f"PDF processed into images at: {image_dir}")
+
+        except Exception as e:
+            self.logger.error(f"Error processing PDF to images: {e}", exc_info=True)
+            self.show_error_message(f"Failed to process PDF into images: {e}")
+
+    def select_first_page(self, pdf_name):
+        try:
+            # Find the project item
+            project_item = None
+            for i in range(self.project_list.topLevelItemCount()):
+                item = self.project_list.topLevelItem(i)
+                if item.text(0) == pdf_name:
+                    project_item = item
+                    break
+
+            if not project_item:
+                self.logger.warning(f"Project '{pdf_name}' not found in project list.")
+                return
+
+            # Select the first page
+            if project_item.childCount() > 0:
+                first_page_item = project_item.child(0)
+                self.project_list.setCurrentItem(first_page_item)
+                self.logger.info(f"Automatically selected the first page: {first_page_item.text(0)}")
+            else:
+                self.logger.warning(f"No pages found under project '{pdf_name}'.")
+        except Exception as e:
+            self.logger.error(f"Error selecting first page: {e}", exc_info=True)
+            self.show_error_message(f"Failed to select first page: {e}")
+
+    def find_project_item(self, project_name):
+        """Finds and returns the QTreeWidgetItem for the given project name."""
+        for i in range(self.project_list.topLevelItemCount()):
+            item = self.project_list.topLevelItem(i)
+            if item.text(0) == project_name:
+                return item
+        return None
+
+    def next_page(self):
+        """Navigate to the next page of the PDF."""
+        try:
+            if self.pdf_images and self.current_page_index + 1 < len(self.pdf_images):
+                self.current_page_index += 1
+                self.load_image(self.pdf_images[self.current_page_index])
+                self.get_main_window().update_page_label(self.current_page_index)
+            else:
+                self.logger.warning("No next page available.")
+        except Exception as e:
+            self.logger.error(f"Error in next_page: {e}")
+            self.get_main_window().show_error_message(f"An error occurred: {e}")
+
+    def previous_page(self):
+        """Navigate to the previous page of the PDF."""
+        try:
+            if self.pdf_images and self.current_page_index - 1 >= 0:
+                self.current_page_index -= 1
+                self.load_image(self.pdf_images[self.current_page_index])
+                self.get_main_window().update_page_label(self.current_page_index)
+            else:
+                self.logger.warning("No previous page available.")
+        except Exception as e:
+            self.logger.error(f"Error in previous_page: {e}")
+            self.get_main_window().show_error_message(f"An error occurred: {e}")
+   
     def on_rectangle_selected(self, rect):
         """Handle the event when a rectangle is selected for cropping in the graphics view."""
         try:
@@ -2019,13 +2120,23 @@ class OCRApp(QMainWindow):
     def on_line_moved(self, line_item, new_line):
         """
         Handle the movement of a line item.
-        
+
         :param line_item: LineItem object that was moved.
         :param new_line: QLineF object representing the new line position.
         """
         try:
+            # Ensure the LineItem has the necessary attributes
+            if not hasattr(line_item, 'line') or not hasattr(line_item, 'orientation') or not hasattr(line_item, 'image_filename'):
+                self.logger.error("LineItem is missing required attributes ('line', 'orientation', 'image_filename').")
+                self.show_error_message("Failed to move line: Internal error.")
+                return
+
             # Capture the previous line position before the move
-            previous_line = line_item.line  # Ensure LineItem has a 'line' attribute
+            # Assuming 'line_item.line' holds the previous line before updating to 'new_line'
+            previous_line = line_item.line
+
+            # Update the LineItem's line to the new position
+            line_item.line = new_line  # Ensure LineItem has a setter for 'line'
 
             # Create MoveLineAction for undo functionality
             action = MoveLineAction(self, line_item, previous_line, new_line)
@@ -2034,20 +2145,31 @@ class OCRApp(QMainWindow):
             self.graphics_view.lineModified.emit()
             self.logger.info(f"Line moved from {previous_line} to {new_line}")
 
-            # Update the lines dictionary
-            image_filename = getattr(line_item, 'image_filename', None)
+            # Update the lines dictionary in graphics_view
+            image_filename = line_item.image_filename  # Direct attribute access
+
             if image_filename and image_filename in self.graphics_view.lines:
-                # Remove the old line tuple
+                # Define old and new tuples
                 old_tuple = (previous_line, line_item.orientation)
                 new_tuple = (new_line, line_item.orientation)
+
+                # Access the list of lines for the current image
+                lines_list = self.graphics_view.lines[image_filename]
+
+                # Attempt to remove the old tuple
                 try:
-                    self.graphics_view.lines[image_filename].remove(old_tuple)
-                    self.graphics_view.lines[image_filename].append(new_tuple)
-                    self.logger.debug(f"Updated lines for {image_filename}: {self.graphics_view.lines[image_filename]}")
+                    lines_list.remove(old_tuple)
+                    self.logger.debug(f"Removed old line tuple {old_tuple} from lines[{image_filename}].")
                 except ValueError:
-                    self.logger.warning(f"Line {old_tuple} not found in lines[{image_filename}].")
-        except AttributeError:
-            self.logger.error(f"LineItem does not have 'line' attribute.", exc_info=True)
+                    self.logger.warning(f"Old line tuple {old_tuple} not found in lines[{image_filename}].")
+
+                # Append the new tuple
+                lines_list.append(new_tuple)
+                self.logger.debug(f"Added new line tuple {new_tuple} to lines[{image_filename}].")
+            else:
+                self.logger.warning(f"Image filename '{image_filename}' not found in lines dictionary.")
+        except AttributeError as ae:
+            self.logger.error(f"LineItem does not have the required attribute: {ae}", exc_info=True)
             self.show_error_message("Failed to move line: Internal error.")
         except Exception as e:
             self.logger.error(f"Error handling line movement: {e}", exc_info=True)
@@ -2324,24 +2446,30 @@ class OCRApp(QMainWindow):
             self.logger.error(f"Error updating page label: {e}")
 
     def show_current_page(self):
-        """Display the current page in the graphics view by loading it from disk."""
+        """Display the current page in the graphics view by loading it from memory."""
         try:
             # Check if the current page index is valid
-            if not self.image_file_paths or self.current_page_index >= len(self.image_file_paths):
+            if not self.pil_images or self.current_page_index >= len(self.pil_images):
                 self.logger.error(f'Invalid page index: {self.current_page_index}')
                 return
 
-            # Load the image for the current page from disk
-            image_file_path = self.image_file_paths[self.current_page_index]
-            self.logger.debug(f"Loading image from {image_file_path}")
-
+            # Get the PIL image for the current page
             pil_image = self.pil_images[self.current_page_index]
-            qimage = self.pil_image_to_qimage(pil_image)  # Convert PIL Image to QImage
+            self.logger.debug(f"Displaying image for page {self.current_page_index + 1}")
+
+            # Ensure the image is in RGBA format
+            pil_image = pil_image.convert("RGBA")
+
+            # Convert PIL image to bytes
+            data = pil_image.tobytes("raw", "RGBA")
+            qimage = QImage(data, pil_image.size[0], pil_image.size[1], QImage.Format_RGBA8888)
+
             if qimage is None:
                 self.logger.error(f"Failed to convert PIL image to QImage for page {self.current_page_index}")
                 return
 
-            self.graphics_view.load_image(qimage)  # Directly call PDFGraphicsView's load_image
+            # Load the image into the graphics view
+            self.graphics_view.load_image(qimage)
 
             # Log the successful loading of the page
             self.logger.info(f'Successfully displayed page {self.current_page_index + 1}')
@@ -2376,49 +2504,6 @@ class OCRApp(QMainWindow):
         except Exception as e:
             self.logger.error(f"Error triggering save_lines: {e}", exc_info=True)
             self.show_error_message(f"Failed to save lines: {e}")
-
-    def save_cropped_image(self, cropped_image, crop_rect):
-        """Save the cropped image to disk and update internal structures."""
-        try:
-            if not self.project_folder:
-                # Prompt the user to select a project folder
-                self.project_folder = QFileDialog.getExistingDirectory(self, "Select Project Folder")
-                if not self.project_folder:
-                    raise ValueError("Project folder not selected.")
-                self.logger.info(f"Project folder set to: {self.project_folder}")
-
-            cropped_image_path = os.path.join(
-                self.project_folder,
-                f"cropped_page_{self.current_page_index + 1}_{len(self.cropped_images.get(self.current_page_index, [])) + 1}.png"
-            )
-
-            # Ensure the cropped image directory exists
-            os.makedirs(os.path.dirname(cropped_image_path), exist_ok=True)
-
-            # Save the cropped image
-            cropped_image.save(cropped_image_path)
-            self.logger.info(f"Cropped image saved to {cropped_image_path}")
-
-            # Add the cropped image to the cropped images dictionary under the current page
-            if self.current_page_index not in self.cropped_images:
-                self.cropped_images[self.current_page_index] = []
-            self.cropped_images[self.current_page_index].append(cropped_image_path)
-
-            # Determine the cropped index
-            cropped_index = len(self.cropped_images[self.current_page_index])
-
-            # Create a red rectangle on the preview
-            rect_item = QGraphicsRectItem(crop_rect)
-            rect_item.setPen(QPen(QColor(255, 0, 0), 2))  # Red pen
-            self.graphics_view.scene().addItem(rect_item)
-
-            # Emit the signal with cropped image details
-            return cropped_image_path, self.current_page_index, cropped_index
-
-        except Exception as e:
-            self.logger.error(f"Error saving cropped image: {e}")
-            self.show_error_message(f"Failed to save cropped image: {e}")
-            return None, None, None
 
     def save_project(self):
         options = QFileDialog.Options()
@@ -2482,40 +2567,36 @@ class OCRApp(QMainWindow):
             return QImage()
 
     def initialize_ocr_engines(self):
-        # Disable the Run OCR button to prevent multiple initialization attempts
-        self.run_ocr_action.setEnabled(False)
-        self.logger.debug("Run OCR button disabled to prevent multiple initializations.")
-        
+        """Initializes the OCR engines."""
         # Update the status bar to inform the user about the initialization process
         self.status_bar.showMessage('Initializing OCR engines...')
         QApplication.processEvents()
-        
+
         try:
             # Determine if GPU is available for OCR processing
             use_gpu = paddle.device.is_compiled_with_cuda()
             self.logger.debug(f"GPU available: {use_gpu}")
-            
+
             # Initialize PaddleOCR engine
             self.logger.info("Initializing PaddleOCR engine.")
             self.ocr_engine = ocr_module.initialize_paddleocr(use_gpu)
             self.logger.debug("PaddleOCR engine initialized successfully.")
-            
+
             # Initialize EasyOCR engine
             self.logger.info("Initializing EasyOCR engine.")
             self.easyocr_engine = ocr_module.initialize_easyocr(use_gpu)
             self.logger.debug("EasyOCR engine initialized successfully.")
-            
+
             # Mark OCR engines as initialized
             self.ocr_initialized = True
             self.logger.info("Both OCR engines initialized successfully.")
-            
+
             self.status_bar.showMessage('OCR engines initialized successfully.', 5000)
-        
+
         except Exception as e:
             self.show_error_message(f'Failed to initialize OCR engines: {e}')
             self.logger.error(f'Failed to initialize OCR engines: {e}', exc_info=True)
             self.ocr_initialized = False
-        
         finally:
             self.run_ocr_action.setEnabled(True)
             self.logger.debug("Run OCR button re-enabled after initialization attempt.")
@@ -2527,8 +2608,12 @@ class OCRApp(QMainWindow):
         """
         # Check if OCR engines are initialized
         if not self.ocr_initialized:
-            self.show_error_message('Please initialize the OCR engines before running OCR.')
-            self.logger.error('Attempted to run OCR without initialized OCR engines.')
+            self.initialize_ocr_engines()
+
+        # Validate OCR engines
+        if not self.ocr_initialized:
+            self.show_error_message('Failed to initialize OCR engines.')
+            self.logger.error('OCR engines not initialized.')
             return
 
         # Validate PDF file path
@@ -2544,12 +2629,13 @@ class OCRApp(QMainWindow):
         self.save_current_rectangles()
         self.save_current_lines()
 
-        # Set up the progress bar
-        self.progress_bar = QProgressBar()
-        self.status_bar.addPermanentWidget(self.progress_bar)
-        self.progress_bar.setMaximum(100)  # Percentage-based progress
-
+        # Initialize the progress bar
+        if not self.progress_bar:
+            self.progress_bar = QProgressBar()
+            self.status_bar.addPermanentWidget(self.progress_bar)
+            self.progress_bar.setMaximum(100)
         self.progress_bar.setValue(0)
+
         self.ocr_cancel_event = threading.Event()
 
         # Update the OCR action button to allow cancellation
@@ -2570,14 +2656,20 @@ class OCRApp(QMainWindow):
 
         # Extract user-added lines with their orientations
         user_lines = {}
-        for image_filename, line_items in pdf_graphics_view.lines.items():
-            # Ensure that each line item is a tuple of (QLineF, orientation)
+        for image_path, line_items in pdf_graphics_view.lines.items():
+            # Extract base filename to match OCRWorker's image_list expectations
+            image_filename = os.path.basename(image_path)
             structured_lines = []
             for line_item in line_items:
-                if hasattr(line_item, 'line') and hasattr(line_item, 'orientation'):
-                    structured_lines.append((line_item.line, line_item.orientation))
+                # line_item is expected to be a tuple: (QLineF, orientation)
+                if isinstance(line_item, tuple) and len(line_item) == 2:
+                    line, orientation = line_item
+                    if isinstance(line, QLineF) and orientation in ['horizontal', 'vertical']:
+                        structured_lines.append((line, orientation))
+                    else:
+                        self.logger.warning(f"Invalid line item format in {image_filename}. Skipping this line.")
                 else:
-                    self.logger.warning(f"Invalid line item format in {image_filename}. Skipping this line.")
+                    self.logger.warning(f"Invalid line item structure in {image_filename}. Skipping this line.")
             if structured_lines:
                 user_lines[image_filename] = structured_lines
 
@@ -2588,7 +2680,7 @@ class OCRApp(QMainWindow):
                     self.logger.error(f"Invalid line object in {image} for orientation {orientation}.")
                 if orientation not in ['horizontal', 'vertical']:
                     self.logger.error(f"Invalid orientation '{orientation}' in {image}.")
-        
+
         self.logger.debug(f"User-added lines: {user_lines}")
 
         # Instantiate the OCRWorker thread
@@ -2616,13 +2708,58 @@ class OCRApp(QMainWindow):
         self.run_ocr_action.triggered.disconnect(self.run_ocr)
         self.run_ocr_action.triggered.connect(self.cancel_ocr)
 
+    def save_cropped_image(self, cropped_image, crop_rect):
+        """Save the cropped image to disk and update internal structures."""
+        try:
+            if not self.view.project_folder:
+                # Prompt the user to select a project folder
+                self.view.project_folder = QFileDialog.getExistingDirectory(self.view, "Select Project Folder")
+                if not self.view.project_folder:
+                    raise ValueError("Project folder not selected.")
+                self.view.logger.info(f"Project folder set to: {self.view.project_folder}")
+
+            cropped_image_path = os.path.join(
+                self.view.project_folder,
+                f"cropped_page_{self.view.current_page_index + 1}_{len(self.view.cropped_images.get(self.view.current_page_index, [])) + 1}.png"
+            )
+
+            # Ensure the cropped image directory exists
+            os.makedirs(os.path.dirname(cropped_image_path), exist_ok=True)
+
+            # Save the cropped image
+            cropped_image.save(cropped_image_path)
+            self.view.logger.info(f"Cropped image saved to {cropped_image_path}")
+
+            # Add the cropped image to the cropped images dictionary under the current page
+            if self.view.current_page_index not in self.view.cropped_images:
+                self.view.cropped_images[self.view.current_page_index] = []
+            self.view.cropped_images[self.view.current_page_index].append(cropped_image_path)
+
+            # Determine the cropped index
+            cropped_index = len(self.view.cropped_images[self.view.current_page_index])
+
+            # Create and add a RectItem to the scene
+            rect_item = RectItem(crop_rect, image_filename=self.view.get_current_image_filename())
+            rect_item.setPen(QPen(QColor(255, 0, 0), 2))  # Red pen
+            self.view.scene().addItem(rect_item)
+            self.view._rect_items.append(rect_item)
+
+            # Emit the signal with cropped image details
+            return cropped_image_path, self.view.current_page_index, cropped_index
+
+        except Exception as e:
+            self.view.logger.error(f"Error saving cropped image: {e}")
+            self.view.show_error_message(f"Failed to save cropped image: {e}")
+            return None, None, None
+        
     def crop_image_pil(self, pil_image, rect):
         try:
-            pixmap_item = self.graphics_view._pixmap_item
+            pixmap_item = self.view.graphics_view._pixmap_item
             if not pixmap_item:
-                self.logger.error("No pixmap item found in graphics view.")
+                self.view.logger.error("No pixmap item found in graphics view.")
                 raise ValueError("No image loaded in the graphics view.")
 
+            # Map the rectangle from scene coordinates to pixmap coordinates
             mapped_rect = pixmap_item.mapFromScene(rect).boundingRect()
 
             pixmap_width = pixmap_item.pixmap().width()
@@ -2640,17 +2777,17 @@ class OCRApp(QMainWindow):
             right = int(min(mapped_rect.right() * scale, image_width))
             bottom = int(min(mapped_rect.bottom() * scale, image_height))
 
-            self.logger.debug(f"Cropping rectangle (pixels): Left={left}, Top={top}, Right={right}, Bottom={bottom}")
+            self.view.logger.debug(f"Cropping rectangle (pixels): Left={left}, Top={top}, Right={right}, Bottom={bottom}")
 
             if right > left and bottom > top:
                 cropped_image = pil_image.crop((left, top, right, bottom))
                 return cropped_image
             else:
-                self.logger.error(f"Invalid crop dimensions: Left={left}, Top={top}, Right={right}, Bottom={bottom}")
+                self.view.logger.error(f"Invalid crop dimensions: Left={left}, Top={top}, Right={right}, Bottom={bottom}")
                 raise ValueError("Crop dimensions are out of bounds or invalid.")
 
         except Exception as e:
-            self.logger.error(f"Error cropping image: {e}", exc_info=True)
+            self.view.logger.error(f"Error cropping image: {e}", exc_info=True)
             raise ValueError(f"Crop operation failed: {e}")
 
     def toggle_edit_mode(self):
@@ -2703,8 +2840,8 @@ class OCRApp(QMainWindow):
         self.setStyleSheet(f"font-size: {self.text_size}px;")
         self.status_bar.showMessage(f'Text size changed to {size}px.', 5000)
 
-    def display_table(self, table_data):
-        """Display OCR results in a table view."""
+    def display_table(self, table_data, low_confidence_results):
+        """Display OCR results in a table view with low-confidence cells highlighted in red."""
         try:
             if not table_data:
                 self.show_error_message("No data to display.")
@@ -2727,14 +2864,43 @@ class OCRApp(QMainWindow):
             table_widget.setRowCount(max_row + 1)
             table_widget.setColumnCount(max_col + 1)
             
+            # # Set headers if available
+            # headers = table_data.get(0, {})
+            # for col in range(max_col + 1):
+            #     header_text = headers.get(col, f"Column {col+1}")
+            #     table_widget.setHorizontalHeaderItem(col, QTableWidgetItem(header_text))
+            
             # Populate the table
-            for row in range(max_row + 1):
+            for row in range(1, max_row + 1):  # Start from 1 if row 0 is headers
                 for col in range(max_col + 1):
                     text = table_data.get(row, {}).get(col, "")
-                    table_widget.setItem(row, col, QTableWidgetItem(text))
+                    item = QTableWidgetItem(text)
+                    
+                    # Check if this cell is in low_confidence_results
+                    if (row, col) in low_confidence_results:
+                        item.setBackground(QColor(255, 0, 0, 100))  # Semi-transparent red
+                        item.setToolTip("Low confidence")
+                    
+                    table_widget.setItem(row, col, item)
             
-            # Add the table widget to the GUI (assuming you have a layout for it)
-            self.display_csv_as_table.addWidget(table_widget)
+            # Adjust table settings
+            table_widget.resizeColumnsToContents()
+            table_widget.resizeRowsToContents()
+            table_widget.setAlternatingRowColors(True)
+            table_widget.setSelectionBehavior(QTableWidget.SelectRows)
+            table_widget.setEditTriggers(QTableWidget.NoEditTriggers)
+            table_widget.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            table_widget.setSortingEnabled(True)
+            
+            # Replace the existing table in 'Table View' tab
+            table_view_index = self.output_tabs.indexOf(self.tableWidget)
+            if table_view_index != -1:
+                self.output_tabs.removeTab(table_view_index)
+            
+            self.output_tabs.addTab(table_widget, 'Table View')
+            self.output_tabs.setCurrentWidget(table_widget)
+            
+            self.logger.info("OCR results displayed in table view successfully.")
         
         except Exception as e:
             self.logger.error(f"Error in display_table: {e}", exc_info=True)
@@ -2769,27 +2935,21 @@ class OCRApp(QMainWindow):
         Handles the completion of the OCR task in the GUI, including saving the results to a CSV,
         updating the GUI with performance statistics, and showing OCR quality information.
         """
-        # Unpack the result
-        all_table_data, total, bad, easyocr_count, paddleocr_count, processing_time = result
-
-        # Determine where to save the CSV
+        all_table_data, total, bad, easyocr_count, paddleocr_count, low_confidence_results, processing_time = result
+        
         if self.current_pdf_path:
             default_csv_name = os.path.splitext(os.path.basename(self.current_pdf_path))[0] + '.csv'
             default_csv_path = os.path.join(self.project_folder, default_csv_name)
         else:
             default_csv_path = os.path.join(self.project_folder, 'ocr_results.csv')
 
-        csv_file_path = default_csv_path  # Save CSV directly into the project folder
-
-        # Write the table data to CSV
+        csv_file_path = default_csv_path
         try:
             ocr_module.write_results_to_csv(all_table_data, csv_file_path)
         except Exception as e:
             self.show_error_message(f"Failed to write CSV file: {e}")
             self.logger.error(f"Failed to write CSV file: {e}")
             return
-
-        # Read the CSV content and display it in the GUI's CSV output panel
         try:
             with open(csv_file_path, 'r', encoding='utf-8') as f:
                 csv_content = f.read()
@@ -2799,24 +2959,39 @@ class OCRApp(QMainWindow):
             self.logger.error(f"Failed to read CSV file: {e}")
 
         self.status_bar.showMessage(f"OCR Completed. Results saved to {csv_file_path}", 5000)
-        self.last_csv_path = csv_file_path  # Store the path of the last saved CSV for later use
-        self.export_excel_action.setEnabled(True)  # Enable the "Export to Excel" action
+        self.last_csv_path = csv_file_path 
+        self.export_excel_action.setEnabled(True) 
 
         # Display the OCR results in the table view
-        self.display_table(all_table_data)
-
-        # Display CSV as table
-        #self.display_csv_as_table(self.output_csv)
+        self.display_table(all_table_data, low_confidence_results)
 
         # Cleanup temporary files used during OCR
-        ocr_module.cleanup('temp_gui')
-        ocr_module.cleanup('temp_images')
-        ocr_module.cleanup('temp')
+        try:
+            if os.path.exists('temp_gui'):
+                ocr_module.cleanup('temp_gui')
+        except Exception as e:
+            self.logger.warning(f"Could not cleanup 'temp_gui': {e}")
+
+        try:
+            if os.path.exists('temp_images'):
+                ocr_module.cleanup('temp_images')
+        except Exception as e:
+            self.logger.warning(f"Could not cleanup 'temp_images': {e}")
+
+        try:
+            if os.path.exists('temp'):
+                ocr_module.cleanup('temp')
+        except Exception as e:
+            self.logger.warning(f"Could not cleanup 'temp': {e}")
 
         # Remove the progress bar from the status bar
         if self.progress_bar:
             self.status_bar.removeWidget(self.progress_bar)
             self.progress_bar = None
+
+        # Reset the remaining time label
+        self.remaining_time_label.setText("Estimated remaining time: N/A")
+        self.logger.debug("Remaining time label reset after OCR completion.")
 
         # Performance statistics
         num_pages = len(self.graphics_view.pdf_images)
@@ -2849,18 +3024,15 @@ class OCRApp(QMainWindow):
         """
         Handles errors that occur during the OCR process.
         """
-        # Update status bar to reflect OCR failure
         self.status_bar.showMessage('OCR Failed', 5000)
-
-        # Show an error message dialog
         self.show_error_message(f'OCR Failed: {error_message}')
-
-        # Remove the progress bar from the status bar
         if self.progress_bar:
             self.status_bar.removeWidget(self.progress_bar)
             self.progress_bar = None
 
-        # Reset the OCR running state and button text
+        self.remaining_time_label.setText("Estimated remaining time: N/A")
+        self.logger.debug("Remaining time label reset after OCR error.")
+
         self.ocr_running = False
         self.run_ocr_action.setText('Run OCR')
 
@@ -2875,6 +3047,16 @@ class OCRApp(QMainWindow):
             self.status_bar.showMessage('OCR cancellation requested.', 5000)
             self.run_ocr_action.setText('Run OCR')
             self.ocr_running = False
+
+            if self.progress_bar:
+                self.status_bar.removeWidget(self.progress_bar)
+                self.progress_bar = None
+
+            self.remaining_time_label.setText("Estimated remaining time: N/A")
+            self.logger.debug("Remaining time label reset after OCR cancellation.")
+
+            self.run_ocr_action.triggered.disconnect(self.cancel_ocr)
+            self.run_ocr_action.triggered.connect(self.run_ocr)
         else:
             self.logger.warning("Attempted to cancel OCR, but no OCR process is running.")
             self.show_error_message('No OCR process is currently running.')
@@ -2922,40 +3104,41 @@ class OCRApp(QMainWindow):
         else:
             self.show_error_message('No CSV file available to export.')
 
-    def update_project_list(self, project_name, page_index, cropped_index, cropped_image_path):
-        """Update the project list with the new cropped image under the specified project and page."""
+    def update_project_list(self, pdf_path, page_index, cropped_index, cropped_image_path):
         try:
-            self.logger.info(f"Updating project list for project '{project_name}', page_index={page_index}, cropped_index={cropped_index}, image_path={cropped_image_path}")
+            pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
+            self.logger.info(f"Updating project list for PDF '{pdf_name}', page_index={page_index}, cropped_index={cropped_index}, image_path={cropped_image_path}")
 
-            if project_name is None or page_index is None or cropped_index is None or cropped_image_path is None:
+            if None in (pdf_name, page_index, cropped_index, cropped_image_path):
                 self.logger.warning("Invalid data received for updating project list.")
                 return
 
-            # Find or create the project item
+            # Find or create the PDF project item
             project_item = None
             for i in range(self.project_list.topLevelItemCount()):
                 item = self.project_list.topLevelItem(i)
-                if item.text(0) == project_name:
+                if item.text(0) == pdf_name:
                     project_item = item
                     break
             if not project_item:
                 project_item = QTreeWidgetItem(self.project_list)
-                project_item.setText(0, project_name)
+                project_item.setText(0, pdf_name)
                 project_item.setFlags(project_item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-                self.logger.info(f"Created new project item: {project_name}")
+                self.logger.info(f"Created new project item: {pdf_name}")
 
             # Find or create the page item under the project
             page_item = None
+            page_label = f"Page {page_index + 1} of '{pdf_name}'"
             for i in range(project_item.childCount()):
                 child = project_item.child(i)
-                if child.text(0) == f"Page {page_index + 1}":
+                if child.text(0) == page_label:
                     page_item = child
                     break
             if not page_item:
                 page_item = QTreeWidgetItem(project_item)
-                page_item.setText(0, f"Page {page_index + 1}")
+                page_item.setText(0, page_label)
                 page_item.setFlags(page_item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-                self.logger.info(f"Created new page item: Page {page_index + 1}")
+                self.logger.info(f"Created new page item: {page_label}")
 
             # Add the cropped image under the page
             cropped_item_text = f"Cropped {cropped_index + 1}: {os.path.basename(cropped_image_path)}"
@@ -2968,6 +3151,7 @@ class OCRApp(QMainWindow):
 
             # Optionally, scroll to the new item
             self.project_list.scrollToItem(cropped_item)
+
         except Exception as e:
             self.logger.error(f"Error updating project list: {e}", exc_info=True)
             self.show_error_message(f"Failed to update project list: {e}")
@@ -2976,26 +3160,35 @@ class OCRApp(QMainWindow):
         """Refresh the project explorer to reflect current project folder contents."""
         try:
             self.project_list.clear()
-            if self.project_folder:
-                # Assume self.project_folder is a list of projects
-                for project_name, project_data in self.project_folder.items():
-                    project_item = QTreeWidgetItem(self.project_list)
-                    project_item.setText(0, project_name)
-                    project_item.setFlags(project_item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
 
-                    # Add pages and their cropped images
-                    for page_index, image_path in enumerate(project_data['image_file_paths']):
+            # Check if project_folder is a valid directory
+            if isinstance(self.project_folder, str) and os.path.exists(self.project_folder):
+                # Use the current PDF name as the project name
+                pdf_name = os.path.splitext(os.path.basename(self.current_pdf_path))[0]
+
+                # Create the top-level project item in the project list
+                project_item = QTreeWidgetItem(self.project_list)
+                project_item.setText(0, pdf_name)
+                project_item.setFlags(project_item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+
+                # Add pages based on image file paths
+                image_dir = os.path.join(self.project_folder, 'temp_images')
+                if os.path.exists(image_dir):
+                    image_files = sorted(os.listdir(image_dir))
+                    for page_index, image_file in enumerate(image_files):
                         page_item = QTreeWidgetItem(project_item)
                         page_item.setText(0, f"Page {page_index + 1}")
+                        page_item.setData(0, Qt.UserRole, os.path.join(image_dir, image_file))
                         page_item.setFlags(page_item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
 
-                        # Add cropped images under the page
-                        for cropped_index, cropped_image_path in enumerate(project_data['cropped_images'].get(page_index, [])):
-                            cropped_item = QTreeWidgetItem(page_item)
-                            cropped_item.setText(0, f"Cropped {cropped_index + 1}: {os.path.basename(cropped_image_path)}")
-                            cropped_item.setFlags(cropped_item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+                    # Optionally, expand the project to show pages
+                    project_item.setExpanded(True)
+                else:
+                    self.logger.warning(f"Image directory not found in project folder: {image_dir}")
 
-                    project_item.setExpanded(True)  # Expand the project folder to show pages and cropped images
+                self.logger.info(f"Project explorer updated for {pdf_name}.")
+            else:
+                raise FileNotFoundError(f"Project folder does not exist or is invalid: {self.project_folder}")
 
         except Exception as e:
             self.logger.error(f"Error updating project explorer: {e}", exc_info=True)
@@ -3042,8 +3235,13 @@ class OCRApp(QMainWindow):
             table_widget.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
             table_widget.setSortingEnabled(True)
 
-            # Add the table widget to the output dock
-            self.display_table(table_widget)
+            # Remove existing widget in 'CSV Output' tab and add the new table
+            csv_output_index = self.output_tabs.indexOf(self.csv_output)
+            if csv_output_index != -1:
+                self.output_tabs.removeTab(csv_output_index)
+            
+            self.output_tabs.addTab(table_widget, 'CSV Output')
+            self.output_tabs.setCurrentWidget(table_widget)
 
             self.logger.info("CSV displayed as table successfully.")
 
