@@ -17,3 +17,5 @@ pandas==2.2.3
 opencv-python==4.5.5.62
 poppler-utils==0.1.0
 PyMuPDF==1.24.11
+torch==2.4.0
+torchvision==0.19.0
