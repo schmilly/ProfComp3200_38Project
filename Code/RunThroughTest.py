@@ -75,7 +75,7 @@ def perform_easyocr(image, reader):
         return '', 0
 
 def process_image(filename, ocr, reader):
-    """Process a single image and perform OCR."""
+    """Process a single image and perform OCR without additional preprocessing."""
     # Extract row and column indices from filename
     parts = filename.split('_')
     try:
@@ -85,41 +85,32 @@ def process_image(filename, ocr, reader):
         print(f"Error parsing filename {filename}: {e}")
         return None
 
+    # Open the image
     image = Image.open(filename).convert("RGB")
-    processed_image = preprocess_image(image)
-    
-    # Perform OCR on the processed image first
-    processed_text, processed_confidence = perform_paddle_ocr(processed_image, ocr, return_confidence=True)
-    
-    if processed_confidence >= 0.98:
-        best_text = processed_text
-        best_confidence = processed_confidence
-        source = 'Processed Image, PaddleOCR'
+
+    # Perform OCR on the original image using PaddleOCR
+    original_text, original_confidence = perform_paddle_ocr(image, ocr, return_confidence=True)
+
+    if original_confidence >= 0.98:
+        best_text = original_text
+        best_confidence = original_confidence
+        source = 'Original Image, PaddleOCR'
     else:
-        # Try OCR on the original image
-        original_text, original_confidence = perform_paddle_ocr(image, ocr, return_confidence=True)
-        
-        if original_confidence >= 0.8:
-            best_text = original_text
-            best_confidence = original_confidence
-            source = 'Original Image, PaddleOCR'
-        else:
-            # Use EasyOCR if confidence is still low
-            easy_processed_text, easy_processed_conf = perform_easyocr(processed_image, reader)
-            easy_original_text, easy_original_conf = perform_easyocr(image, reader)
-            
-            results = [
-                (processed_text, processed_confidence, 'Processed Image, PaddleOCR'),
-                (original_text, original_confidence, 'Original Image, PaddleOCR'),
-                (easy_processed_text, easy_processed_conf, 'Processed Image, EasyOCR'),
-                (easy_original_text, easy_original_conf, 'Original Image, EasyOCR')
-            ]
-            
-            best_text, best_confidence, source = max(results, key=lambda x: x[1])
-    
+        # Use EasyOCR if confidence is still low
+        easy_original_text, easy_original_conf = perform_easyocr(image, reader)
+
+        # Collect all results
+        results = [
+            (original_text, original_confidence, 'Original Image, PaddleOCR'),
+            (easy_original_text, easy_original_conf, 'Original Image, EasyOCR')
+        ]
+
+        # Select the result with the highest confidence
+        best_text, best_confidence, source = max(results, key=lambda x: x[1])
+
     if best_confidence == 0:
         return None
-    
+
     return (row_index, col_index, best_text, best_confidence, source, filename)
 
 def convert_pdf_to_images(pdf_file_path, output_dir, dpi=400):
