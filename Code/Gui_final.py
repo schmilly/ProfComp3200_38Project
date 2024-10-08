@@ -1121,7 +1121,7 @@ class PDFGraphicsView(QGraphicsView):
                 self._line_items.append(line_item)
 
                 # Connect the moved signal
-                line_item.moved.connect(lambda new_line, item=line_item: self.on_line_moved(item, new_line))
+                line_item.moved.connect(lambda new_line, item=line_item: self.get_main_window().on_line_moved(item, new_line))
 
             self.logger.info(f"Displayed {len(lines)} table lines for key '{key}'.")
         except Exception as e:
