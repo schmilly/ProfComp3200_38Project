@@ -424,13 +424,46 @@ class OcrGui(QObject):
     ocr_completed = pyqtSignal(tuple)
     ocr_error = pyqtSignal(str)
 
+class PageSelectionDialog(QDialog):
+    def __init__(self, parent=None, total_pages=0):
+        super().__init__(parent)
+        self.setWindowTitle("Select Pages for OCR")
+
+        self.total_pages = total_pages
+
+        # Create widgets
+        self.label = QLabel(f"Enter page numbers or ranges (1-{self.total_pages}), separated by commas:")
+        self.input_field = QLineEdit()
+        self.input_field.setPlaceholderText("e.g., 1, 3-5, 7")
+
+        # OK and Cancel buttons
+        self.ok_button = QPushButton("OK")
+        self.cancel_button = QPushButton("Cancel")
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.reject)
+
+        # Layout
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(self.ok_button)
+        button_layout.addWidget(self.cancel_button)
+
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(self.label)
+        main_layout.addWidget(self.input_field)
+        main_layout.addLayout(button_layout)
+
+        self.setLayout(main_layout)
+
+    def get_selected_pages(self):
+        return self.input_field.text()
+
 class OCRWorker(QThread):
     ocr_progress = pyqtSignal(int, int)
     ocr_time_estimate = pyqtSignal(float)
     ocr_completed = pyqtSignal(object)
     ocr_error = pyqtSignal(str)
 
-    def __init__(self, pdf_file, storedir, output_csv, ocr_cancel_event, ocr_engine, easyocr_engine, user_lines=None):
+    def __init__(self, pdf_file, storedir, output_csv, ocr_cancel_event, ocr_engine, easyocr_engine, user_lines=None, image_list=None):
         super().__init__()
         self.pdf_file = pdf_file
         self.storedir = storedir
@@ -439,6 +472,7 @@ class OCRWorker(QThread):
         self.ocr_engine = ocr_engine
         self.easyocr_engine = easyocr_engine
         self.user_lines = user_lines if user_lines else {}
+        self.image_list = image_list  # List of images to process
         self.logger = logging.getLogger(self.__class__.__name__)
         self.cell_times = deque(maxlen=20)
 
@@ -572,7 +606,7 @@ class PDFGraphicsView(QGraphicsView):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setAcceptDrops(True)
+        #self.setAcceptDrops(True)
         self.setScene(QGraphicsScene(self))
         self._start_pos = None
         self._current_rect_item = None
@@ -592,6 +626,7 @@ class PDFGraphicsView(QGraphicsView):
         self.manual_table_detection_mode = False
         self.lines = {}
         self.current_image_filename = None
+        self.main_window = None
 
         try:
             self.rectangleSelected.connect(self.get_main_window().on_rectangle_selected)
@@ -599,18 +634,21 @@ class PDFGraphicsView(QGraphicsView):
         except Exception as e:
             self.logger.error(f"Error connecting signals: {e}")
 
+    def set_main_window(self, main_window):
+        self.main_window = main_window
+
     def get_main_window(self):
-        """Traverse the parent hierarchy to get the QMainWindow (OCRApp) instance."""
-        try:
+        if self.main_window:
+            return self.main_window
+        else:
             parent = self.parent()
             while parent is not None:
-                if isinstance(parent, QMainWindow):  # Check if the parent is the QMainWindow
+                if isinstance(parent, QMainWindow):
+                    self.main_window = parent  # Cache the main window for future calls
                     return parent
                 parent = parent.parent()
-            raise RuntimeError("Main window (QMainWindow) not found in the parent hierarchy.")
-        except Exception as e:
-            self.logger.error(f"Error in get_main_window: {e}")
-            raise
+            self.logger.error("Main window not found.")
+            return None
 
     def enable_manual_table_detection(self, enabled):
         """Enable or disable manual table detection mode."""
@@ -643,6 +681,11 @@ class PDFGraphicsView(QGraphicsView):
         else:
             self.logger.info("Horizontal Line Mode deactivated.")
             self.status_bar_message("Horizontal Line Mode Disabled.")
+    
+    def show_error_message(self, message):
+        """Displays an error message to the user."""
+        QMessageBox.critical(self, "Error", message)
+        self.logger.error(f"Error displayed: {message}")
     
     def set_current_image_filename(self, filename):
         self.current_image_filename = filename
@@ -852,13 +895,12 @@ class PDFGraphicsView(QGraphicsView):
             self.logger.error(f"Error removing rectangle: {e}", exc_info=True)
             self.get_main_window().show_error_message(f"Failed to remove rectangle: {e}")
 
-    def load_image(self, image):
+    def load_image(self, image, filename=None):
         """Load and display the given image in the graphics view."""
         try:
             self.scene().clear()
             self._rect_items = []
             self._line_items = []
-            # Assuming 'image' is a QImage or QPixmap
             if isinstance(image, QImage):
                 pixmap = QPixmap.fromImage(image)
             elif isinstance(image, QPixmap):
@@ -866,23 +908,32 @@ class PDFGraphicsView(QGraphicsView):
             else:
                 self.logger.error("Invalid image type passed to load_image.")
                 self._image_loaded = False
-                self._pixmap_item = None  # Ensure _pixmap_item is None on failure
+                self._pixmap_item = None
                 return
-            # Add the pixmap to the scene and keep a reference to it
             self._pixmap_item = self.scene().addPixmap(pixmap)
-            self.fitInView(self.sceneRect(), Qt.KeepAspectRatio)
-            self._image_loaded = True  # Indicate that an image has been loaded
+            # Set the scene rect to match the pixmap's bounding rect
+            self.scene().setSceneRect(self._pixmap_item.boundingRect())
+            # Fit the view to the pixmap item
+            self.fitInView(self._pixmap_item, Qt.KeepAspectRatio)
+            self._image_loaded = True
             self.logger.debug(f"Image loaded successfully in PDFGraphicsView. Pixmap item: {self._pixmap_item}")
+            self.current_image_filename = filename
         except Exception as e:
             self.logger.error(f"Error loading image in PDFGraphicsView: {e}", exc_info=True)
             self._image_loaded = False
-            self._pixmap_item = None  # Ensure _pixmap_item is None on failure
+            self._pixmap_item = None
 
     def mousePressEvent(self, event):
         try:
             if event.button() == Qt.LeftButton:
                 scene_pos = self.mapToScene(event.pos())
-                if self.adding_vertical_line or self.adding_horizontal_line:
+                if self.cropping_mode:
+                    # Start drawing rectangle for cropping
+                    self._start_pos = scene_pos
+                    self._temp_rect_item = QGraphicsRectItem()
+                    self._temp_rect_item.setPen(QPen(QColor(255, 0, 0), 1, Qt.DashLine))
+                    self.scene().addItem(self._temp_rect_item)
+                elif self.adding_vertical_line or self.adding_horizontal_line:
                     # Start drawing line
                     self._start_pos = scene_pos
                     self._temp_line = QGraphicsLineItem()
@@ -914,7 +965,10 @@ class PDFGraphicsView(QGraphicsView):
         try:
             if hasattr(self, '_start_pos') and self._start_pos:
                 current_pos = self.mapToScene(event.pos())
-                if hasattr(self, '_temp_line') and self._temp_line:
+                if self.cropping_mode and hasattr(self, '_temp_rect_item') and self._temp_rect_item:
+                    rect = QRectF(self._start_pos, current_pos).normalized()
+                    self._temp_rect_item.setRect(rect)
+                elif hasattr(self, '_temp_line') and self._temp_line:
                     if self.adding_vertical_line:
                         # Vertical line: x remains constant
                         line = QLineF(self._start_pos.x(), self._start_pos.y(), self._start_pos.x(), current_pos.y())
@@ -927,6 +981,8 @@ class PDFGraphicsView(QGraphicsView):
                 elif hasattr(self, '_temp_rect_item') and self._temp_rect_item:
                     rect = QRectF(self._start_pos, current_pos).normalized()
                     self._temp_rect_item.setRect(rect)
+                else:
+                    super().mouseMoveEvent(event)
             else:
                 super().mouseMoveEvent(event)
         except Exception as e:
@@ -936,7 +992,23 @@ class PDFGraphicsView(QGraphicsView):
     def mouseReleaseEvent(self, event):
         try:
             if event.button() == Qt.LeftButton:
-                if hasattr(self, '_temp_line') and self._temp_line:
+                if self.cropping_mode and hasattr(self, '_temp_rect_item') and self._temp_rect_item:
+                    # Finalize rectangle and perform cropping
+                    rect = self._temp_rect_item.rect()
+                    self.scene().removeItem(self._temp_rect_item)
+                    del self._temp_rect_item
+                    self._start_pos = None
+
+                    # Proceed to crop the image
+                    self.rectangleSelected.emit(rect)
+
+                    # Turn off cropping mode
+                    self.cropping_mode = False
+                    self.enable_cropping_mode(False)
+                    # Uncheck the cropping action in the main window
+                    self.get_main_window().cropping_mode_action.setChecked(False)
+
+                elif hasattr(self, '_temp_line') and self._temp_line:
                     # Finalize line
                     line = self._temp_line.line()
                     self.scene().removeItem(self._temp_line)
@@ -961,7 +1033,7 @@ class PDFGraphicsView(QGraphicsView):
                         self.get_main_window().add_vertical_line_action.setChecked(False)
                         self.get_main_window().add_horizontal_line_action.setChecked(False)
                 elif hasattr(self, '_temp_rect_item') and self._temp_rect_item:
-                    # Finalize rectangle
+                    # Finalize rectangle in manual mode
                     rect = self._temp_rect_item.rect()
                     self.scene().removeItem(self._temp_rect_item)
                     del self._temp_rect_item
@@ -981,9 +1053,9 @@ class PDFGraphicsView(QGraphicsView):
             if event.modifiers() & Qt.ControlModifier:
                 angle = event.angleDelta().y()
                 if angle > 0:
-                    self.get_main_window().zoom_in
+                    self.get_main_window().zoom_in()
                 elif angle < 0:
-                    self.get_main_window().zoom_out
+                    self.get_main_window().zoom_out()
                 event.accept()
             else:
                 super().wheelEvent(event)
@@ -1179,41 +1251,6 @@ class PDFGraphicsView(QGraphicsView):
             self.scene().removeItem(line_item)
         self._line_items.clear()
 
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        if event.mimeData().hasUrls():
-            # Check if any of the URLs is a supported file type
-            for url in event.mimeData().urls():
-                if url.isLocalFile():
-                    file_path = url.toLocalFile()
-                    _, ext = os.path.splitext(file_path)
-                    if ext.lower() in self.get_main_window().SUPPORTED_PDF_FORMATS.union(self.get_main_window().SUPPORTED_IMAGE_FORMATS):
-                        event.acceptProposedAction()
-                        return
-        event.ignore()
-
-    def dropEvent(self, event):
-        try:
-            if event.mimeData().hasUrls():
-                for url in event.mimeData().urls():
-                    if url.isLocalFile():
-                        file_path = url.toLocalFile()
-                        mime_type, _ = mimetypes.guess_type(file_path)
-                        if not mime_type:
-                            _, ext = os.path.splitext(file_path)
-                            ext = ext.lower()
-                            if ext == '.pdf':
-                                mime_type = 'application/pdf'
-                            elif ext in ['.png', '.jpg', '.jpeg']:
-                                mime_type = 'image/' + ext.lstrip('.')
-                        if mime_type == 'application/pdf' or mime_type.startswith('image/'):
-                            self.get_main_window().process_files([file_path])
-                            self.get_main_window().update_recent_files(file_path)
-                        else:
-                            self.get_main_window().show_error_message("Invalid file type. Only PDF or image files supported.")
-        except Exception as e:
-            self.get_main_window().show_error_message(f"An error occurred while dropping files: {e}")
-            self.logger.error(f"Error in dropEvent: {e}", exc_info=True)
-
 class OCRApp(QMainWindow):
     ocr_completed = pyqtSignal(object)
     ocr_progress = pyqtSignal(int, int)
@@ -1256,6 +1293,7 @@ class OCRApp(QMainWindow):
         self.ocr_worker.ocr_progress.connect(self.update_remaining_time_label)
         self.ocr_worker.ocr_completed.connect(self.on_ocr_completed)
         self.ocr_worker.ocr_error.connect(self.show_error_message)
+        self.graphics_view.rectangleSelected.connect(self.on_rectangle_selected)
 
     def init_ui(self):
         splitter = QSplitter(Qt.Horizontal)
@@ -1429,8 +1467,13 @@ class OCRApp(QMainWindow):
 
         # Run OCR
         self.run_ocr_action = QAction('Run OCR', self)
-        self.run_ocr_action.triggered.connect(self.run_ocr)
+        self.run_ocr_action.triggered.connect(self.run_ocr_on_selected_pages)
         tool_bar.addAction(self.run_ocr_action)
+
+        # New action for OCR on selected pages
+        self.run_ocr_selected_pages_action = QAction('Page Select', self)
+        self.run_ocr_selected_pages_action.triggered.connect(self.run_ocr_on_selected_pages)
+        tool_bar.addAction(self.run_ocr_selected_pages_action)
 
         # Detect Tables Action
         self.detect_tables_action = QAction('Detect Tables', self)
@@ -1464,7 +1507,7 @@ class OCRApp(QMainWindow):
         self.edit_mode_action = QAction('Editing Mode', self)
         self.edit_mode_action.setCheckable(True)
         self.edit_mode_action.setChecked(True)
-        self.edit_mode_action.setEnabled(False)
+        self.edit_mode_action.setEnabled(True)
         self.edit_mode_action.triggered.connect(self.toggle_edit_mode)
         tool_bar.addAction(self.edit_mode_action)
 
@@ -1780,7 +1823,7 @@ class OCRApp(QMainWindow):
                 # Convert PIL image to QImage
                 pil_image = self.pil_images[page_index]
                 qimage = pil_image.convert("RGBA").toqimage()
-                self.graphics_view.load_image(qimage)
+                self.graphics_view.load_image(qimage, filename=image_path)
 
             # Display the detected lines in the graphics view
             self.graphics_view.display_lines(lines, key=key)
@@ -1797,7 +1840,6 @@ class OCRApp(QMainWindow):
                 self.logger.error(f"Table detection on {'page' if is_pdf else 'image'} {page_index + 1} failed: {e}", exc_info=True)
 
     def open_pdf(self):
-        """Opens a PDF file, processes it into images, updates the project list, and selects the first page."""
         options = QFileDialog.Options()
         file_name, _ = QFileDialog.getOpenFileName(
             self, 
@@ -1807,37 +1849,82 @@ class OCRApp(QMainWindow):
             options=options
         )
         if file_name:
-            try:
-                self.current_pdf_path = file_name
-                self.logger.info(f"PDF file selected: {file_name}")
-
-                # Set the project folder based on the PDF name
-                pdf_name = os.path.splitext(os.path.basename(file_name))[0]
-                self.project_folder = os.path.join(os.getcwd(), pdf_name)
-                os.makedirs(self.project_folder, exist_ok=True)
-
-                # Process the PDF into images and save them in temp_images directory
-                self.process_pdf_to_images(file_name)
-
-                # Update recent files list
-                self.update_recent_files(file_name)
-
-                # Update project explorer
-                self.update_project_explorer()
-
-                # Select the first page in the project list
-                self.select_first_page(pdf_name)
-
-            except Exception as e:
-                self.logger.error(f"Failed to open PDF: {e}", exc_info=True)
-                self.show_error_message(f"Failed to open PDF: {e}")
+            self.load_pdf_file(file_name)
         else:
             self.logger.warning("No file selected.")
 
-    def process_pdf_to_images(self, pdf_path):
+    def load_pdf_file(self, file_name):
+        try:
+            self.current_pdf_path = file_name
+            self.logger.info(f"PDF file selected: {file_name}")
+
+            # Set the project folder based on the PDF name
+            pdf_name = os.path.splitext(os.path.basename(file_name))[0]
+            project_folder = os.path.join(os.getcwd(), pdf_name)
+            os.makedirs(project_folder, exist_ok=True)
+
+            # Assign project_folder to self.project_folder
+            self.project_folder = project_folder
+
+            # Process the PDF into images and save them in temp_images directory
+            self.process_pdf_to_images(file_name, project_folder)
+
+            # Update recent files list
+            self.update_recent_files(file_name)
+
+            # Add the new project to the project explorer
+            self.add_project_to_explorer(pdf_name, project_folder)
+
+            # Select the first page of the new project
+            self.select_first_page(pdf_name)
+
+        except Exception as e:
+            self.logger.error(f"Failed to load PDF: {e}", exc_info=True)
+            self.show_error_message(f"Failed to load PDF: {e}")
+
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        self.logger.debug("MainWindow: Drag Enter Event detected.")
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.isLocalFile():
+                    file_path = url.toLocalFile()
+                    _, ext = os.path.splitext(file_path)
+                    self.logger.debug(f"MainWindow: Dragged file: {file_path}, Extension: {ext}")
+                    if ext.lower() in self.SUPPORTED_PDF_FORMATS.union(self.SUPPORTED_IMAGE_FORMATS):
+                        self.logger.debug("MainWindow: File format supported. Accepting drag event.")
+                        event.acceptProposedAction()
+                        return
+        self.logger.debug("MainWindow: File format not supported or no URLs. Ignoring drag event.")
+        event.ignore()
+
+    def dropEvent(self, event: QDropEvent):
+        self.logger.debug("MainWindow: Drop Event detected.")
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.isLocalFile():
+                    file_path = url.toLocalFile()
+                    self.logger.debug(f"MainWindow: Dropped file: {file_path}")
+                    _, ext = os.path.splitext(file_path)
+                    ext = ext.lower()
+                    self.logger.debug(f"MainWindow: File extension: {ext}")
+                    if ext in self.SUPPORTED_PDF_FORMATS or ext in self.SUPPORTED_IMAGE_FORMATS:
+                        self.logger.debug("MainWindow: File is a PDF or supported image. Processing.")
+                        self.process_files([file_path])
+                        self.update_recent_files(file_path)
+                        event.acceptProposedAction()
+                    else:
+                        self.logger.warning("MainWindow: Invalid file type dropped.")
+                        self.show_error_message("Invalid file type. Only PDF or image files supported.")
+                        event.ignore()
+        else:
+            self.logger.debug("MainWindow: No URLs in drop event.")
+            event.ignore()
+
+    def process_pdf_to_images(self, pdf_path, project_folder):
         """Processes the PDF into images and saves them in the project folder."""
         try:
-            image_dir = os.path.join(self.project_folder, 'temp_images')
+            image_dir = os.path.join(project_folder, 'temp_images')
             os.makedirs(image_dir, exist_ok=True)
 
             # Use pdf2image to convert PDF pages to images
@@ -1851,8 +1938,8 @@ class OCRApp(QMainWindow):
                 page_image.save(image_path, 'PNG')
                 self.image_file_paths.append(image_path)
                 self.pil_images.append(page_image)  # Add the PIL image to the list
-
-                self.logger.debug(f"Saved image: {image_path}")
+                self.logger.debug(f"Added PIL image for page {i+1}")
+                #self.logger.debug(f"Saved image: {image_path}")
 
             self.logger.debug(f"Total images processed: {len(self.pil_images)}")
 
@@ -1924,13 +2011,15 @@ class OCRApp(QMainWindow):
     def on_rectangle_selected(self, rect):
         """Handle the event when a rectangle is selected for cropping in the graphics view."""
         try:
-            if self.current_page_index < 0 or self.current_page_index >= len(self.pil_images):
-                raise IndexError("Current page index is out of bounds.")
-
             self.logger.info(f"Cropping area selected on page {self.current_page_index + 1}: {rect}")
 
+            # Get the current PIL image
+            pil_image = self.pil_images[self.current_page_index]
+            if pil_image is None:
+                raise ValueError("No PIL image found for current page.")
+
             # Crop the selected area using the PIL image
-            cropped_image = self.crop_image_pil(self.pil_images[self.current_page_index], rect)
+            cropped_image = self.crop_image_pil(pil_image, rect)
             if cropped_image is None:
                 raise ValueError("Cropping returned None.")
 
@@ -1938,27 +2027,23 @@ class OCRApp(QMainWindow):
             cropped_image_path, page_index, cropped_index = self.save_cropped_image(cropped_image, rect)
 
             if cropped_image_path:
-                # Emit the signal with necessary parameters
-                self.croppedImageCreated.emit(page_index, cropped_index, cropped_image_path)
+                # Update the project list to show the new cropped image
+                self.update_project_list(self.current_pdf_path, page_index, cropped_index, cropped_image_path)
 
-                # Optionally, refresh the project list to show the new cropped image
-                self.populate_project_list()
-
+                # Turn off cropping mode
                 self.cropping_mode_action.setChecked(False)
                 self.graphics_view.enable_cropping_mode(False)
                 self.logger.info("Cropping mode turned off after cropping action.")
-
-            return cropped_image_path, page_index, cropped_index
+            else:
+                self.logger.error("Failed to save cropped image.")
 
         except IndexError as e:
             self.logger.error(f"Index error in on_rectangle_selected: {e}")
             self.show_error_message(f"An error occurred: {e}")
-            return None, None, None
 
         except Exception as e:
-            self.logger.error(f"Error cropping image: {e}")
+            self.logger.error(f"Error cropping image: {e}", exc_info=True)
             self.show_error_message(f"Failed to crop image: {e}")
-            return None, None, None
 
     def detect_line_intersections(self):
         """Detect intersections between vertical and horizontal lines and record them as table bounding boxes."""
@@ -2068,7 +2153,7 @@ class OCRApp(QMainWindow):
             self.current_page_index = len(self.pil_images) - 1
             
             # Load the image into the graphics view
-            self.graphics_view.load_image(qimage)
+            self.graphics_view.load_image(qimage, filename=cropped_image_path)
 
             # Log the successful loading of the cropped image
             self.logger.info(f'Successfully displayed cropped image from page {page_index + 1}, cropped index {cropped_index + 1}')
@@ -2213,15 +2298,15 @@ class OCRApp(QMainWindow):
                     self.recent_files.insert(0, file_path)
                     if len(self.recent_files) > 5:
                         self.recent_files = self.recent_files[:5]
-                        self.update_recent_files_menu()
+                    self.update_recent_files_menu()
 
                 # Handle PDF files
                 if ext in self.SUPPORTED_PDF_FORMATS:
-                    self.handle_pdf_file(path)
+                    self.load_pdf_file(str(path))
                 
                 # Handle supported image files
                 elif ext in self.SUPPORTED_IMAGE_FORMATS:
-                    self.handle_image_file(path)
+                    self.load_image_file(str(path))
                 
                 # Unsupported file type
                 else:
@@ -2232,107 +2317,54 @@ class OCRApp(QMainWindow):
             self.show_error_message(f"An error occurred while processing files: {e}")
             self.logger.error(f"Error in process_files: {e}", exc_info=True)
 
-    def handle_image_file(self, path):
+    def load_image_file(self, file_name):
         """Handle loading of an image file."""
-        self.clear_current_project()
         try:
-            image = QImage(str(path))
+            self.clear_current_project()
+            image = QImage(file_name)
             if image.isNull():
                 raise ValueError("Failed to load image. File may be corrupted.")
 
-            # Set project_folder to a dedicated directory for the project
-            self.project_folder = os.path.join(os.path.dirname(os.path.abspath(path)), "OCR_Project")
-            os.makedirs(self.project_folder, exist_ok=True)
+            # Set the project folder based on the image name
+            image_name = os.path.splitext(os.path.basename(file_name))[0]
+            project_folder = os.path.join(os.getcwd(), image_name)
+            os.makedirs(project_folder, exist_ok=True)
+            self.project_folder = project_folder
             self.logger.info(f"Project folder set to: {self.project_folder}")
 
             # Convert QImage to PIL Image for consistency
-            pil_image = Image.open(str(path)).convert('RGB')
-            self.pil_images.append(pil_image)
-
-            # Convert PIL Image to QImage
-            qimage = self.pil_image_to_qimage(pil_image)
-            self.qimages.append(qimage)
+            pil_image = Image.open(file_name).convert('RGB')
+            self.pil_images = [pil_image]  # Initialize with the new image
+            self.qimages = [self.pil_image_to_qimage(pil_image)]
 
             # Save the image as an image file in the temporary directory
             temp_dir = Path('temp_images')
             temp_dir.mkdir(exist_ok=True)
-            page_index = len(self.pil_images) - 1  # Zero-based index
-            image_file_path = temp_dir / f"image_{page_index + 1}.png"
+            image_file_path = temp_dir / f"{image_name}.png"
             pil_image.save(image_file_path, "PNG")
-            self.image_file_paths.append(str(image_file_path))
+            self.image_file_paths = [str(image_file_path)]
 
             # Load the image into the graphics view
-            self.graphics_view.load_image(qimage)
+            self.graphics_view.load_image(self.qimages[0], filename=str(image_file_path))
 
-            # Populate the project list with the new image as a top-level item
-            self.populate_project_list()
+            # Add the new project to the project explorer
+            self.add_project_to_explorer(image_name, project_folder)
 
-            # Display the newly added image
-            self.current_page_index = len(self.pil_images) - 1
-            self.show_current_page()
-            self.status_bar.showMessage(f"Image '{path.name}' Loaded Successfully", 5000)
+            # Select the first page of the new project
+            self.select_first_page(image_name)
 
             # Enable actions once an image is loaded
             self.enable_actions_after_loading()
 
-            self.update_recent_files(str(path))  # Update recent files
+            # Update recent files list
+            self.update_recent_files(file_name)
 
-            self.logger.info(f"Image loaded and added to project: {path}")
-
-        except Exception as e:
-            self.show_error_message(f"Error loading image '{path.name}': {e}")
-            self.logger.error(f"Error loading image from {path}: {e}", exc_info=True)
-
-    def handle_pdf_file(self, path):
-        """Handle loading of a PDF file."""
-        try:
-            self.status_bar.showMessage('Loading PDF...')
-            self.logger.info(f"Loading PDF file: {path}")
-            
-            # Set project_folder to the directory containing the PDF
-            self.project_folder = os.path.dirname(os.path.abspath(path))
-            self.logger.info(f"Project folder set to: {self.project_folder}")
-            
-            # Convert PDF to list of PIL Images
-            pil_images = convert_from_path(str(path))
-            if not pil_images:
-                raise ValueError('No pages found in the PDF.')
-
-            for pil_img in pil_images:
-                pil_img = pil_img.convert('RGB')  # Ensure consistency in image mode
-                self.pil_images.append(pil_img)
-                qimage = self.pil_image_to_qimage(pil_img)
-                self.qimages.append(qimage)
-
-            # Save each page as an image file
-            temp_dir = Path('temp_images')
-            temp_dir.mkdir(exist_ok=True)
-            for idx, pil_img in enumerate(self.pil_images[-len(pil_images):], start=1):
-                image_file_path = temp_dir / f"page_{idx}.png"
-                pil_img.save(image_file_path, "PNG")
-                self.image_file_paths.append(str(image_file_path))
-
-            # Populate the project list with page names as top-level items
-            self.populate_project_list()
-
-            # Display the first page initially
-            self.current_page_index = len(self.pil_images) - len(pil_images)
-            self.show_current_page()
-            self.status_bar.showMessage('PDF Loaded Successfully', 5000)
-
-            # Enable actions once a PDF is loaded
-            self.enable_actions_after_loading()
-
-            self.logger.info(f"PDF loaded and converted to images: {path}")
-
-            # Assign the current PDF path
-            self.current_pdf_path = str(path)
-            self.logger.info(f"Current PDF path set to: {self.current_pdf_path}")
+            self.logger.info(f"Image loaded and added to project: {file_name}")
+            self.status_bar.showMessage(f"Image '{image_name}' Loaded Successfully", 5000)
 
         except Exception as e:
-            self.logger.error(f'Failed to load PDF: {e}', exc_info=True)
-            QMessageBox.critical(self, 'Error', f'Failed to load PDF: {e}')
-            self.status_bar.showMessage('Failed to load PDF', 5000)
+            self.show_error_message(f"Error loading image '{os.path.basename(file_name)}': {e}")
+            self.logger.error(f"Error loading image from {file_name}: {e}", exc_info=True)
 
     def clear_current_project(self):
         """Clear all current project data."""
@@ -2387,6 +2419,7 @@ class OCRApp(QMainWindow):
             # Enable actions once a PDF is loaded
             self.enable_actions_after_loading()
 
+
         except Exception as e:
             self.logger.error(f'Failed to load PDF: {e}', exc_info=True)
             QMessageBox.critical(self, 'Error', f'Failed to load PDF: {e}')
@@ -2437,6 +2470,7 @@ class OCRApp(QMainWindow):
         self.cropping_mode_action.setEnabled(True)
         self.manual_table_detection_action.setEnabled(True)
         self.save_lines_action.setEnabled(True)
+        self.logger.info("Enabled actions after loading PDF.")
 
     def update_page_label(self, page_index):
         """Update the page label or selection in the project list when the page changes."""
@@ -2467,13 +2501,9 @@ class OCRApp(QMainWindow):
             if qimage is None:
                 self.logger.error(f"Failed to convert PIL image to QImage for page {self.current_page_index}")
                 return
-
-            # Load the image into the graphics view
-            self.graphics_view.load_image(qimage)
-
-            # Log the successful loading of the page
+            filename = self.image_file_paths[self.current_page_index]
+            self.graphics_view.load_image(qimage, filename=filename)
             self.logger.info(f'Successfully displayed page {self.current_page_index + 1}')
-
             # Load existing rectangles if any
             self.graphics_view.clear_rectangles()
             page_rects = self.rectangles.get(self.current_page_index, [])
@@ -2488,6 +2518,8 @@ class OCRApp(QMainWindow):
             key = f"{self.current_page_index}_full"
             page_lines = self.lines.get(key, [])
             self.graphics_view.display_lines(page_lines, key=key)
+
+            self.enable_actions_after_loading()
 
         except Exception as e:
             self.logger.error(f"Failed to display page {self.current_page_index}: {e}", exc_info=True)
@@ -2601,10 +2633,12 @@ class OCRApp(QMainWindow):
             self.run_ocr_action.setEnabled(True)
             self.logger.debug("Run OCR button re-enabled after initialization attempt.")
 
-    def run_ocr(self):
+    def run_ocr(self, selected_pages=None):
         """
         Initiates the OCR process by setting up necessary parameters,
         initializing the OCRWorker thread, and handling user interactions.
+
+        :param selected_pages: Optional list of page indices (zero-based) to process. If None, all pages are processed.
         """
         # Check if OCR engines are initialized
         if not self.ocr_initialized:
@@ -2622,6 +2656,24 @@ class OCRApp(QMainWindow):
             self.logger.error('Invalid or missing PDF file path.')
             return
 
+        if selected_pages is None:
+            # If no specific pages are selected, process all pages
+            self.logger.debug(f"Length of self.pil_images: {len(self.pil_images)}")
+            selected_pages = list(range(len(self.pil_images)))
+
+        # Ensure selected_pages is a list
+        if not isinstance(selected_pages, list):
+            self.logger.error(f"selected_pages is not a list: {selected_pages}, type: {type(selected_pages)}")
+            self.show_error_message('Invalid page selection.')
+            return
+
+        # Ensure selected_pages is not empty
+        self.logger.debug(f"Selected pages: {selected_pages}, type: {type(selected_pages)}")
+        if not selected_pages:
+            self.show_error_message('No pages selected for OCR.')
+            self.logger.error('No pages selected for OCR.')
+            return
+
         self.status_bar.showMessage('Running OCR...', 5000)
         QApplication.processEvents()
 
@@ -2633,7 +2685,7 @@ class OCRApp(QMainWindow):
         if not self.progress_bar:
             self.progress_bar = QProgressBar()
             self.status_bar.addPermanentWidget(self.progress_bar)
-            self.progress_bar.setMaximum(100)
+        self.progress_bar.setMaximum(len(selected_pages))
         self.progress_bar.setValue(0)
 
         self.ocr_cancel_event = threading.Event()
@@ -2654,24 +2706,19 @@ class OCRApp(QMainWindow):
             self.logger.error('PDFGraphicsView instance not found.')
             return
 
-        # Extract user-added lines with their orientations
-        user_lines = {}
-        for image_path, line_items in pdf_graphics_view.lines.items():
-            # Extract base filename to match OCRWorker's image_list expectations
-            image_filename = os.path.basename(image_path)
-            structured_lines = []
-            for line_item in line_items:
-                # line_item is expected to be a tuple: (QLineF, orientation)
-                if isinstance(line_item, tuple) and len(line_item) == 2:
-                    line, orientation = line_item
-                    if isinstance(line, QLineF) and orientation in ['horizontal', 'vertical']:
-                        structured_lines.append((line, orientation))
-                    else:
-                        self.logger.warning(f"Invalid line item format in {image_filename}. Skipping this line.")
-                else:
-                    self.logger.warning(f"Invalid line item structure in {image_filename}. Skipping this line.")
-            if structured_lines:
-                user_lines[image_filename] = structured_lines
+        # Use existing image paths
+        self.logger.info("Preparing image list for OCR.")
+        image_list = []
+        for page_index in selected_pages:
+            image_path = self.image_file_paths[page_index]
+            if not os.path.exists(image_path):
+                self.logger.error(f"Image file does not exist: {image_path}")
+                self.show_error_message(f"Image file does not exist: {image_path}")
+                return
+            image_list.append(image_path)
+
+        # Extract user-added lines with their orientations for selected pages
+        user_lines = self.get_user_lines_for_pages(selected_pages)
 
         # Check if user_lines is correctly structured
         for image, lines in user_lines.items():
@@ -2681,7 +2728,7 @@ class OCRApp(QMainWindow):
                 if orientation not in ['horizontal', 'vertical']:
                     self.logger.error(f"Invalid orientation '{orientation}' in {image}.")
 
-        self.logger.debug(f"User-added lines: {user_lines}")
+        self.logger.debug(f"User-added lines for selected pages: {user_lines}")
 
         # Instantiate the OCRWorker thread
         self.ocr_worker = OCRWorker(
@@ -2691,7 +2738,8 @@ class OCRApp(QMainWindow):
             ocr_cancel_event=self.ocr_cancel_event,
             ocr_engine=self.ocr_engine,
             easyocr_engine=self.easyocr_engine,
-            user_lines=user_lines
+            user_lines=user_lines,
+            image_list=image_list  # Pass the list of images to process
         )
 
         # Connect OCRWorker signals to respective slots
@@ -2708,53 +2756,130 @@ class OCRApp(QMainWindow):
         self.run_ocr_action.triggered.disconnect(self.run_ocr)
         self.run_ocr_action.triggered.connect(self.cancel_ocr)
 
+    def run_ocr_on_selected_pages(self):
+        """Initiate OCR on user-selected pages."""
+        try:
+            total_pages = len(self.pil_images)  # Assuming self.pil_images contains all the pages
+            if total_pages == 0:
+                self.show_error_message("No pages available for OCR.")
+                return
+
+            # Open the page selection dialog
+            dialog = PageSelectionDialog(self, total_pages)
+            if dialog.exec_() == QDialog.Accepted:
+                page_input = dialog.get_selected_pages()
+                selected_pages = self.parse_page_selection(page_input, total_pages)
+                if not selected_pages:
+                    self.show_error_message("No valid pages selected for OCR.")
+                    return
+
+                # Run OCR on selected pages
+                self.run_ocr(selected_pages)
+        except Exception as e:
+            self.logger.error(f"Error initiating OCR on selected pages: {e}", exc_info=True)
+            self.show_error_message(f"An error occurred: {e}")
+
+    def parse_page_selection(self, page_input, total_pages):
+        """
+        Parses the user's page selection input and returns a list of zero-based page indices.
+
+        :param page_input: String input from the user (e.g., "1", "1-3", "1,3,5-7")
+        :param total_pages: Total number of pages available
+        :return: List of zero-based page indices
+        """
+        try:
+            self.logger.debug(f"Parsing page selection input: '{page_input}'")
+            if not isinstance(page_input, str):
+                raise ValueError("Page input must be a string.")
+
+            if not page_input.strip():
+                self.logger.debug("No page input provided.")
+                return []
+
+            pages = set()
+            for part in page_input.split(','):
+                part = part.strip()
+                if '-' in part:
+                    start, end = part.split('-')
+                    start = int(start)
+                    end = int(end)
+                    if start > end:
+                        self.logger.warning(f"Ignoring invalid range '{part}'")
+                        continue
+                    # Convert to zero-based index
+                    pages.update(range(start - 1, end))
+                else:
+                    page = int(part)
+                    # Convert to zero-based index
+                    pages.add(page - 1)
+
+            # Filter out invalid page indices
+            valid_pages = sorted([p for p in pages if 0 <= p < total_pages])
+            self.logger.debug(f"Parsed pages: {valid_pages}")
+            return valid_pages
+        except Exception as e:
+            self.logger.error(f"Error parsing page selection: {e}", exc_info=True)
+            self.show_error_message(f"Invalid page selection format: {e}")
+            return []
+
+    def get_user_lines_for_pages(self, selected_pages):
+        """Retrieve user-added lines for the selected pages."""
+        user_lines = {}
+        for page_index in selected_pages:
+            page_key = f"{page_index}_full"  # Adjust this if necessary
+            lines = self.graphics_view.lines.get(page_key, [])
+            image_filename = os.path.basename(self.image_file_paths[page_index])
+            user_lines[image_filename] = lines
+        return user_lines
+
     def save_cropped_image(self, cropped_image, crop_rect):
         """Save the cropped image to disk and update internal structures."""
         try:
-            if not self.view.project_folder:
+            if not self.project_folder:
                 # Prompt the user to select a project folder
-                self.view.project_folder = QFileDialog.getExistingDirectory(self.view, "Select Project Folder")
-                if not self.view.project_folder:
+                self.project_folder = QFileDialog.getExistingDirectory(self, "Select Project Folder")
+                if not self.project_folder:
                     raise ValueError("Project folder not selected.")
-                self.view.logger.info(f"Project folder set to: {self.view.project_folder}")
+                self.logger.info(f"Project folder set to: {self.project_folder}")
 
-            cropped_image_path = os.path.join(
-                self.view.project_folder,
-                f"cropped_page_{self.view.current_page_index + 1}_{len(self.view.cropped_images.get(self.view.current_page_index, [])) + 1}.png"
-            )
-
-            # Ensure the cropped image directory exists
-            os.makedirs(os.path.dirname(cropped_image_path), exist_ok=True)
+            # Construct the path to save the cropped image
+            cropped_image_dir = os.path.join(self.project_folder, 'cropped_images')
+            os.makedirs(cropped_image_dir, exist_ok=True)
+            cropped_image_filename = f"cropped_page_{self.current_page_index + 1}_{len(self.cropped_images.get(self.current_page_index, [])) + 1}.png"
+            cropped_image_path = os.path.join(cropped_image_dir, cropped_image_filename)
 
             # Save the cropped image
             cropped_image.save(cropped_image_path)
-            self.view.logger.info(f"Cropped image saved to {cropped_image_path}")
+            self.logger.info(f"Cropped image saved to {cropped_image_path}")
 
             # Add the cropped image to the cropped images dictionary under the current page
-            if self.view.current_page_index not in self.view.cropped_images:
-                self.view.cropped_images[self.view.current_page_index] = []
-            self.view.cropped_images[self.view.current_page_index].append(cropped_image_path)
+            if self.current_page_index not in self.cropped_images:
+                self.cropped_images[self.current_page_index] = []
+            self.cropped_images[self.current_page_index].append(cropped_image_path)
 
             # Determine the cropped index
-            cropped_index = len(self.view.cropped_images[self.view.current_page_index])
+            cropped_index = len(self.cropped_images[self.current_page_index])
+
+            # Get the current image filename
+            current_image_filename = self.image_file_paths[self.current_page_index]
 
             # Create and add a RectItem to the scene
-            rect_item = RectItem(crop_rect, image_filename=self.view.get_current_image_filename())
+            rect_item = RectItem(crop_rect, image_filename=current_image_filename)
             rect_item.setPen(QPen(QColor(255, 0, 0), 2))  # Red pen
-            self.view.scene().addItem(rect_item)
-            self.view._rect_items.append(rect_item)
+            self.graphics_view.scene().addItem(rect_item)
+            self._rect_items.append(rect_item)
 
-            # Emit the signal with cropped image details
-            return cropped_image_path, self.view.current_page_index, cropped_index
+            # Return the cropped image details
+            return cropped_image_path, self.current_page_index, cropped_index
 
         except Exception as e:
-            self.view.logger.error(f"Error saving cropped image: {e}")
-            self.view.show_error_message(f"Failed to save cropped image: {e}")
+            self.logger.error(f"Error saving cropped image: {e}", exc_info=True)
+            self.show_error_message(f"Failed to save cropped image: {e}")
             return None, None, None
-        
+
     def crop_image_pil(self, pil_image, rect):
         try:
-            pixmap_item = self.view.graphics_view._pixmap_item
+            pixmap_item = self.graphics_view._pixmap_item
             if not pixmap_item:
                 self.view.logger.error("No pixmap item found in graphics view.")
                 raise ValueError("No image loaded in the graphics view.")
@@ -2777,24 +2902,26 @@ class OCRApp(QMainWindow):
             right = int(min(mapped_rect.right() * scale, image_width))
             bottom = int(min(mapped_rect.bottom() * scale, image_height))
 
-            self.view.logger.debug(f"Cropping rectangle (pixels): Left={left}, Top={top}, Right={right}, Bottom={bottom}")
+            self.logger.debug(f"Cropping rectangle (pixels): Left={left}, Top={top}, Right={right}, Bottom={bottom}")
 
             if right > left and bottom > top:
                 cropped_image = pil_image.crop((left, top, right, bottom))
                 return cropped_image
             else:
-                self.view.logger.error(f"Invalid crop dimensions: Left={left}, Top={top}, Right={right}, Bottom={bottom}")
+                self.logger.error(f"Invalid crop dimensions: Left={left}, Top={top}, Right={right}, Bottom={bottom}")
                 raise ValueError("Crop dimensions are out of bounds or invalid.")
 
         except Exception as e:
-            self.view.logger.error(f"Error cropping image: {e}", exc_info=True)
+            self.logger.error(f"Error cropping image: {e}", exc_info=True)
             raise ValueError(f"Crop operation failed: {e}")
 
     def toggle_edit_mode(self):
         if self.edit_mode_action.isChecked():
             self.graphics_view.setDragMode(QGraphicsView.ScrollHandDrag)
+            self.logger.debug("Edit mode enabled: Drag mode set to ScrollHandDrag")
         else:
             self.graphics_view.setDragMode(QGraphicsView.NoDrag)
+            self.logger.debug("Edit mode disabled: Drag mode set to NoDrag")
 
     def toggle_cropping_mode(self):
         if self.cropping_mode_action.isChecked():
@@ -3056,7 +3183,7 @@ class OCRApp(QMainWindow):
             self.logger.debug("Remaining time label reset after OCR cancellation.")
 
             self.run_ocr_action.triggered.disconnect(self.cancel_ocr)
-            self.run_ocr_action.triggered.connect(self.run_ocr)
+            self.run_ocr_action.triggered.connect(self.run_ocr_on_selected_pages)
         else:
             self.logger.warning("Attempted to cancel OCR, but no OCR process is running.")
             self.show_error_message('No OCR process is currently running.')
@@ -3069,7 +3196,7 @@ class OCRApp(QMainWindow):
         self.run_ocr_action.setText('Run OCR')
         self.ocr_running = False
         self.run_ocr_action.triggered.disconnect(self.cancel_ocr)
-        self.run_ocr_action.triggered.connect(self.run_ocr)
+        self.run_ocr_action.triggered.connect(self.run_ocr_on_selected_pages)
 
     def save_csv(self):
         # Read data from the tableWidget and write to CSV
@@ -3193,6 +3320,33 @@ class OCRApp(QMainWindow):
         except Exception as e:
             self.logger.error(f"Error updating project explorer: {e}", exc_info=True)
             self.show_error_message(f"Failed to update project explorer: {e}")
+
+    def add_project_to_explorer(self, pdf_name, project_folder):
+        try:
+            # Create the top-level project item
+            project_item = QTreeWidgetItem(self.project_list)
+            project_item.setText(0, pdf_name)
+            project_item.setFlags(project_item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+
+            # Add pages to the project item
+            image_dir = os.path.join(project_folder, 'temp_images')
+            if os.path.exists(image_dir):
+                image_files = sorted(os.listdir(image_dir))
+                for page_index, image_file in enumerate(image_files):
+                    page_item = QTreeWidgetItem(project_item)
+                    page_item.setText(0, f"Page {page_index + 1}")
+                    page_item.setData(0, Qt.UserRole, os.path.join(image_dir, image_file))
+                    page_item.setFlags(page_item.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+
+                # Expand the project item
+                project_item.setExpanded(True)
+            else:
+                self.logger.warning(f"Image directory not found in project folder: {image_dir}")
+
+            self.logger.info(f"Project '{pdf_name}' added to the explorer.")
+        except Exception as e:
+            self.logger.error(f"Error adding project to explorer: {e}", exc_info=True)
+            self.show_error_message(f"Failed to add project to explorer: {e}")
 
     def display_csv_as_table(self, csv_path):
         """Display the CSV file as a table in the output dock."""
