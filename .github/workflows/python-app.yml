@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build_Linux_Python:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -59,7 +59,7 @@ jobs:
       run: echo "The build failed! Consider reviewing the logs."
   
   # Job for running the Windows batch file
-  run_bat:
+  build_Windows_bin:
     needs: build   # Ensures this job runs after the Ubuntu job completes
     runs-on: windows-latest
 
@@ -72,7 +72,7 @@ jobs:
 
       - name: Run Windows setup.bat
         run: |
-          setup.bat
+          .\setup.bat
 
       - name: Notify on failure
         if: failure()
