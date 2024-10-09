@@ -52,7 +52,7 @@ Extract text and tables from your PDF by performing OCR.
 ### 5.1. Page Selection
 - **Toolbar**: Click `Page Select` with the desired page range.
 
-### 5.2. Page Selection
+### 5.2. Table Detection
 - **Toolbar**: Click `Detect Tables` with the page selected to visualise cells.
 
 ### 5.3. Run OCR
