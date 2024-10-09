@@ -14,8 +14,8 @@ import shutil
 import csv
 import traceback
 from email.message import EmailMessage
-from PyPDF2 import PdfFileReader
-import PyPDF2
+#from PyPDF2 import PdfFileReader
+#import PyPDF2
 import json
 import paddle
 from collections import deque
@@ -36,7 +36,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QPixmap, QImage, QPen, QColor, QPainter, QFont, QDragEnterEvent, QDropEvent, QCursor, QIcon
 from PyQt5.QtCore import Qt, QRectF, QObject, pyqtSignal, QLineF, QThread, QPointF, QSizeF
-from pdf2image import convert_from_path
+#from pdf2image import convert_from_path
 from PIL import Image
 from logging.handlers import RotatingFileHandler
 
@@ -537,7 +537,7 @@ class OCRWorker(QThread):
         try:
             self.logger.info("OCR process started.")
             start_time = time.time()
-
+    
             # Validate paths
             if not self.pdf_file or not os.path.exists(self.pdf_file):
                 raise ValueError("Invalid or missing PDF file path.")
@@ -545,93 +545,103 @@ class OCRWorker(QThread):
                 raise ValueError("Invalid or missing storage directory.")
             output_dir = os.path.dirname(self.output_csv)
             os.makedirs(output_dir, exist_ok=True)
-
+    
             # Use the existing image list passed from the GUI
             image_list = self.image_list
             if self.ocr_cancel_event.is_set():
                 self.emit_cancellation()
-
+    
             # Detect tables in images
             self.logger.info("Detecting tables in images.")
             auto_TableMap = ocr_module.detect_tables_in_images(image_list)
             if self.ocr_cancel_event.is_set():
                 self.emit_cancellation()
-
+    
             # Ensure auto_TableMap is a list with correct length
             if isinstance(auto_TableMap, dict):
                 auto_TableMap = [auto_TableMap.get(image, [[], []]) for image in image_list]
             elif not (isinstance(auto_TableMap, list) and len(auto_TableMap) == len(image_list)):
                 raise ValueError("Mismatch between number of images and detected table maps.")
-
+    
             # Merge user-added lines
             self.logger.info("Incorporating user-added lines into table detection.")
             combined_TableMap = self._merge_user_lines(auto_TableMap, image_list)
-
+    
             if self.ocr_cancel_event.is_set():
                 self.emit_cancellation()
-
+    
             # Validate combined_TableMap
             for idx, (columns, rows) in enumerate(combined_TableMap):
                 if not (isinstance(columns, list) and isinstance(rows, list)):
                     raise ValueError(f"Invalid table structure for image {image_list[idx]} at index {idx}.")
                 if len(columns) < 2 or len(rows) < 2:
                     raise ValueError(f"Insufficient number of columns or rows for image {image_list[idx]} at index {idx}.")
-
+    
             # Cellularize images
             self.logger.info("Cellularizing images based on combined table detection.")
             locationlists = ocr_module.cellularize_images(image_list, combined_TableMap)
             if self.ocr_cancel_event.is_set():
                 self.emit_cancellation()
-
+    
+            # Flatten the list of image filenames
             all_filenames = [filename for collection in locationlists for filename in collection]
             total_images = len(all_filenames)
             self.logger.info(f"Total cell images to process: {total_images}")
-
+    
             if not all_filenames:
                 raise ValueError("No cell images found for OCR processing.")
-
-            # OCR Processing
-            self.logger.info("Starting OCR processing on cell images.")
-            results = []
-            for idx, filename in enumerate(all_filenames, start=1):
+    
+            # Initialize cumulative time
+            self.cumulative_time = 0
+    
+            # Define progress callback function
+            def progress_callback(idx, total_images, remaining_time):
                 if self.ocr_cancel_event.is_set():
                     self.emit_cancellation()
-
-                cell_start = time.time()
-                result = ocr_module.process_image(filename, self.ocr_engine, self.easyocr_engine)
-                if result:
-                    results.append(result)
-                cell_duration = time.time() - cell_start
-                self.cell_times.append(cell_duration)
-                #self.logger.debug(f"Processed {filename} in {cell_duration:.2f} seconds.")
-
-                # Estimate remaining time
-                average_time = sum(self.cell_times) / len(self.cell_times) if self.cell_times else 0
-                remaining_time = (total_images - idx) * average_time
-
-                # Emit progress and remaining time
-                self.ocr_progress.emit(idx, total_images)
-                self.ocr_time_estimate.emit(remaining_time)
-
+                # Emit progress and remaining time less frequently
+                if idx % 10 == 0 or idx == total_images:
+                    self.ocr_progress.emit(idx, total_images)
+                    self.ocr_time_estimate.emit(remaining_time)
+    
+            # OCR Processing using process_all_images
+            self.logger.info("Starting OCR processing on cell images.")
+    
+            # Start timing
+            ocr_start_time = time.time()
+    
+            results = ocr_module.process_all_images(
+                all_filenames,
+                self.ocr_engine,
+                self.easyocr_engine,
+                progress_callback=progress_callback
+            )
+    
+            # End timing
+            ocr_end_time = time.time()
+            self.logger.info(f"OCR processing completed in {ocr_end_time - ocr_start_time:.2f} seconds.")
+    
             if self.ocr_cancel_event.is_set():
                 self.emit_cancellation()
-
+    
             # Process OCR results
             self.logger.info("Processing OCR results.")
             table_data, total, bad, easyocr_count, paddleocr_count, low_confidence_results = ocr_module.process_results(results)
-
+    
             # Write to CSV
             self.logger.info(f"Writing OCR results to CSV: {self.output_csv}")
             ocr_module.write_results_to_csv(table_data, self.output_csv)
             processing_time = time.time() - start_time
-            # Emit completion signal
+    
+            # Emit completion signal with the results and processing time
             self.ocr_completed.emit((table_data, total, bad, easyocr_count, paddleocr_count, low_confidence_results, processing_time))
+    
             self.logger.info("OCR process completed successfully.")
-            self.logger.info(f"Total OCR processing time: {time.time() - start_time:.2f} seconds.")
-
+            self.logger.info(f"Total OCR processing time: {processing_time:.2f} seconds.")
+    
         except Exception as e:
             self.logger.error(f"OCR process failed: {e}", exc_info=True)
             self.ocr_error.emit(f"Critical error: {e}")
+    
 
     def _merge_user_lines(self, auto_TableMap, image_list):
         combined_TableMap = []
@@ -2162,14 +2172,14 @@ class OCRApp(QMainWindow):
             event.ignore()
 
     def process_pdf_to_images(self, pdf_path, project_folder):
-        """Processes the PDF into images and saves them in the project folder."""
+        """Processes the PDF into images and saves them in the project folder using PyMuPDF."""
         try:
             image_dir = os.path.join(project_folder, 'temp_images')
             os.makedirs(image_dir, exist_ok=True)
 
-            # Use pdf2image to convert PDF pages to images
-            from pdf2image import convert_from_path
-            images = convert_from_path(pdf_path)
+            # Use PyMuPDF to convert PDF pages to images
+            from pdf_to_image import pdf_to_images  # Ensure this import matches your project structure
+            images = pdf_to_images(pdf_path, dpi=400)
             self.image_file_paths = []
             self.pil_images = []  # Initialize the list to store PIL images
 
@@ -2179,15 +2189,14 @@ class OCRApp(QMainWindow):
                 self.image_file_paths.append(image_path)
                 self.pil_images.append(page_image)  # Add the PIL image to the list
                 self.logger.debug(f"Added PIL image for page {i+1}")
-                #self.logger.debug(f"Saved image: {image_path}")
 
             self.logger.debug(f"Total images processed: {len(self.pil_images)}")
-
             self.logger.info(f"PDF processed into images at: {image_dir}")
 
         except Exception as e:
             self.logger.error(f"Error processing PDF to images: {e}", exc_info=True)
             self.show_error_message(f"Failed to process PDF into images: {e}")
+
 
     def select_first_page(self, pdf_name):
         try:
@@ -2662,24 +2671,26 @@ class OCRApp(QMainWindow):
             self.show_error_message(f"Failed to clear current project: {e}")
 
     def load_pdf(self, file_path):
-        """Load a PDF and convert each page into PIL and QImage formats."""
+        """Load a PDF and convert each page into PIL and QImage formats using PyMuPDF."""
         self.status_bar.showMessage('Loading PDF...')
         QApplication.processEvents()
 
         try:
-            # Convert PDF to list of PIL Images
-            pil_images = convert_from_path(file_path)
+            # Import the PyMuPDF-based function
+            from pdf_to_image import pdf_to_images
+
+            # Convert PDF to list of PIL Images using PyMuPDF
+            pil_images = pdf_to_images(pdf_path=file_path, dpi=400)
             if not pil_images:
                 raise ValueError('No pages found in the PDF.')
-            
+
             self.pil_images = pil_images  # Store PIL Images
-            
+
             # Convert PIL Images to QImages
             self.qimages = [self.pil_image_to_qimage(pil_img) for pil_img in pil_images]
-            
+
             self.current_page_index = 0  # Start from the first page
-            # self.load_image(self.qimages[self.current_page_index])  # Removed
-            
+
             # Save each page as an image file
             temp_dir = Path('temp_images')
             temp_dir.mkdir(exist_ok=True)
@@ -2687,11 +2698,11 @@ class OCRApp(QMainWindow):
             for idx, pil_img in enumerate(self.pil_images):
                 image_file_path = temp_dir / f"page_{idx + 1}.png"
                 pil_img.save(image_file_path, "PNG")
-                self.image_file_paths.append(image_file_path)
-            
+                self.image_file_paths.append(str(image_file_path))
+
             # Populate the project list with page names as top-level items
             self.populate_project_list()
-            
+
             # Display the first page initially
             self.show_current_page()
             self.status_bar.showMessage('PDF Loaded Successfully', 5000)
@@ -2699,11 +2710,11 @@ class OCRApp(QMainWindow):
             # Enable actions once a PDF is loaded
             self.enable_actions_after_loading()
 
-
         except Exception as e:
             self.logger.error(f'Failed to load PDF: {e}', exc_info=True)
             QMessageBox.critical(self, 'Error', f'Failed to load PDF: {e}')
             self.status_bar.showMessage('Failed to load PDF', 5000)
+
 
     def populate_project_list(self):
         """Populate the project list with pages and images as top-level items."""

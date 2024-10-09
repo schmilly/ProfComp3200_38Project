@@ -142,13 +142,32 @@ def cellularize_images(image_list, TableMap, page_num=0):
         locationlists.append(cellularize_Page_colrow(image_list[index], Table[1], Table[0], page_num + index))
     return locationlists
 
-def process_all_images(all_filenames, ocr, reader):
+def process_all_images(all_filenames, ocr, reader, progress_callback=None):
     """Processes all cell images and collects results."""
     results = []
-    for filename in tqdm(all_filenames, desc="Processing images"):
+    total_images = len(all_filenames)
+    start_time = time.time()
+    cumulative_time = 0
+
+    for idx, filename in enumerate(all_filenames, start=1):
+        cell_start = time.time()
         result = process_image(filename, ocr, reader)
-        results.append(result)
+        if result:
+            results.append(result)
+        cell_duration = time.time() - cell_start
+        cumulative_time += cell_duration
+
+        # Estimate remaining time
+        average_time = cumulative_time / idx
+        remaining_time = (total_images - idx) * average_time
+
+        # Call the progress callback if provided
+        if progress_callback:
+            if idx % 10 == 0 or idx == total_images:
+                progress_callback(idx, total_images, remaining_time)
+
     return results
+
 
 def process_results(results):
     """Processes OCR results and returns aggregated data."""
