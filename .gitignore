@@ -168,3 +168,4 @@ Code/libtinfo5_6.2-0ubuntu2_amd64.deb
 
 # Shouldn't commit output of OCR results
 output.csv
+*.exe

@@ -23,9 +23,7 @@ REM Define minimum Python version
 SET MIN_PYTHON_VERSION=3.11.0
 
 REM Define Poppler version and download URL
-SET POPPLER_VERSION=23.07.0
-SET POPPLER_ZIP=poppler-%POPPLER_VERSION%-0.zip
-SET POPPLER_URL=https://github.com/oschwartz10612/poppler-windows/releases/download/v%POPPLER_VERSION%/%POPPLER_ZIP%
+SET POPPLER_URL=https://github.com/oschwartz10612/poppler-windows/releases/download/v24.08.0-0/Release-24.08.0-0.zip
 
 REM Define Python installer URL for the latest 3.11.x version
 REM Note: Update PYTHON_VERSION_DOWNLOAD if a newer patch is available
@@ -40,30 +38,31 @@ SET VENV_DIR=venv
 REM ------------------------------------------------------------------------------
 REM Function: Check Python Installation and Version
 REM ------------------------------------------------------------------------------
+:: Commented this out as currently doesn't work properly
 :CheckPython
-echo ================================
-echo Checking for Python installation...
-echo ================================
-python --version >nul 2>&1
-IF %ERRORLEVEL% NEQ 0 (
-    echo Python is not installed. Proceeding to install Python %PYTHON_VERSION_DOWNLOAD%...
-    GOTO :InstallPython
-) ELSE (
-    FOR /F "tokens=2 delims= " %%A IN ('python --version') DO SET PYTHON_VERSION=%%A
-    echo Detected Python version: %PYTHON_VERSION%
-    REM Compare Python version using PowerShell
-    FOR /F %%A IN ('powershell -Command "if ([version]'%PYTHON_VERSION%' -ge [version]'%MIN_PYTHON_VERSION%') { Write-Output 1 } else { Write-Output -1 }"') DO SET VERSION_COMPARE=%%A
-    IF "%VERSION_COMPARE%"=="1" (
-        echo Python version is sufficient.
-        GOTO :EndCheckPython
-    ) ELSE (
-        echo Python version is below %MIN_PYTHON_VERSION%. Proceeding to install Python %PYTHON_VERSION_DOWNLOAD%...
-        GOTO :InstallPython
-    )
-)
+::echo ================================
+::echo Checking for Python installation...
+::echo ================================
+::python --version >nul 2>&1
+::IF %ERRORLEVEL% NEQ 0 (
+::    echo Python is not installed. Proceeding to install Python %PYTHON_VERSION_DOWNLOAD%...
+::    GOTO :InstallPython
+::) ELSE (
+::    for /f "tokens=2 delims==" %%i in ('python --version 2^>^&1') do set PYTHON_VERSION=%%i
+::    echo Python version: %PYTHON_VERSION%
+::    REM Compare Python version using PowerShell
+::    FOR /F %%A IN ('powershell -Command "if ([version]'%PYTHON_VERSION%' -ge [version]'%MIN_PYTHON_VERSION%') { Write-Output 1 } else { Write-Output -1 }"') DO SET VERSION_COMPARE=%%A
+::    IF "%VERSION_COMPARE%"=="1" (
+::        echo Python version is sufficient.
+::        GOTO :EndCheckPython
+::    ) ELSE (
+::        echo Python version is below %MIN_PYTHON_VERSION%. Proceeding to install Python %PYTHON_VERSION_DOWNLOAD%...
+::        GOTO :InstallPython
+::    )
+::)
 :EndCheckPython
 echo.
-GOTO :EOF
+GOTO :CreateVenv
 
 REM ------------------------------------------------------------------------------
 REM Function: Install Python Silently
@@ -122,7 +121,7 @@ IF %ERRORLEVEL% NEQ 0 (
     FOR /F "tokens=2 delims= " %%A IN ('python --version') DO SET PYTHON_VERSION_VERIFIED=%%A
     echo Python installed successfully. Version: %PYTHON_VERSION_VERIFIED%
 )
-
+:End
 echo.
 GOTO :EOF
 
@@ -168,6 +167,8 @@ IF NOT DEFINED PYTHON_EXEC (
     EXIT /B 1
 ) ELSE (
     echo Virtual environment activated successfully.
+    
+    GOTO :UpgradePip
 )
 
 echo.
@@ -180,13 +181,14 @@ REM ----------------------------------------------------------------------------
 echo ================================
 echo Upgrading pip...
 echo ================================
-pip install --upgrade pip
+python -m pip install --upgrade pip
 IF %ERRORLEVEL% NEQ 0 (
     echo Failed to upgrade pip.
     pause
     EXIT /B 1
 )
 echo Pip upgraded successfully.
+GOTO :InstallDependencies
 echo.
 GOTO :EOF
 
@@ -210,6 +212,7 @@ IF %ERRORLEVEL% NEQ 0 (
     EXIT /B 1
 )
 echo Python dependencies installed successfully.
+GOTO :InstallPyInstaller
 echo.
 GOTO :EOF
 
@@ -227,6 +230,7 @@ IF %ERRORLEVEL% NEQ 0 (
     EXIT /B 1
 )
 echo PyInstaller installed successfully.
+GOTO :InstallPoppler
 echo.
 GOTO :EOF
 
@@ -288,8 +292,8 @@ IF %ERRORLEVEL% NEQ 0 (
     EXIT /B 1
 ) ELSE (
     echo Poppler installed successfully.
+    GOTO :CreateExecutable
 )
-
 echo.
 GOTO :EOF
 
@@ -307,6 +311,7 @@ IF %ERRORLEVEL% NEQ 0 (
     EXIT /B 1
 )
 echo Executable created successfully.
+GOTO :FinalChecks
 echo.
 GOTO :EOF
 
@@ -335,7 +340,6 @@ GOTO :EOF
 REM ------------------------------------------------------------------------------
 REM Main Execution Flow
 REM ------------------------------------------------------------------------------
-CALL :CheckPython
 CALL :CreateVenv
 CALL :UpgradePip
 CALL :InstallDependencies
@@ -345,7 +349,7 @@ CALL :CreateExecutable
 CALL :FinalChecks
 
 echo ================================
-echo Setup completed successfully.
+echo Setup completed
 echo ================================
 pause
 EXIT /B 0

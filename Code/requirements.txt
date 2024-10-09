@@ -19,5 +19,7 @@ torch==2.4.0; sys_platform == 'darwin'
 torchvision==0.19.0; sys_platform == 'darwin'
 paddlepaddle==3.0.0b1; sys_platform == 'darwin'
 paddlepaddle==2.6.1; sys_platform != 'darwin'
-torch==2.3.1+cpu -f https://download.pytorch.org/whl/torch_stable.html; sys_platform != 'darwin'
-torchvision==0.18.1+cpu -f https://download.pytorch.org/whl/torch_stable.html; sys_platform != 'darwin'
+
+-f https://download.pytorch.org/whl/torch_stable.html
+torch==2.3.1+cpu; sys_platform != 'darwin'
+torchvision==0.18.1+cpu;  sys_platform != 'darwin'
