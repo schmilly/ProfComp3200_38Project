@@ -24,6 +24,8 @@ SET MIN_PYTHON_VERSION=3.11.0
 
 REM Define Poppler version and download URL
 SET POPPLER_URL=https://github.com/oschwartz10612/poppler-windows/releases/download/v24.08.0-0/Release-24.08.0-0.zip
+SET POPPLER_ZIP=POPPLER.zip
+SET POPPLER_VERSION=24.08.0
 
 REM Define Python installer URL for the latest 3.11.x version
 REM Note: Update PYTHON_VERSION_DOWNLOAD if a newer patch is available
@@ -253,7 +255,7 @@ IF %ERRORLEVEL% NEQ 0 (
 
 REM Extract Poppler using PowerShell
 echo Extracting Poppler...
-powershell -Command "try { Expand-Archive -Path '%POPPLER_ZIP%' -DestinationPath '%POPPLER_DIR%' -Force } catch { exit 1 }"
+powershell -Command "try { Expand-Archive -Path '%POPPLER_ZIP%' -DestinationPath '%POPPLER_DIR%' } catch { exit 1 }"
 IF %ERRORLEVEL% NEQ 0 (
     echo Failed to extract Poppler.
     del /f /q %POPPLER_ZIP%
@@ -274,7 +276,7 @@ REM Add Poppler to the user PATH permanently
 echo Adding Poppler to user PATH...
 powershell -Command ^
 "$currentPath = [Environment]::GetEnvironmentVariable('PATH', 'User'); ^
- if (-not $currentPath.Contains('%POPPLER_BIN%')) { ^
+ if (-not $currentPath.Contains('%POPPLER_BIN%')) { 
     [Environment]::SetEnvironmentVariable('PATH', '$currentPath;%POPPLER_BIN%', 'User') }"
 
 IF %ERRORLEVEL% NEQ 0 (
