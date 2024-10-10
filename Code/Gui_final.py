@@ -1,6 +1,8 @@
 # Standard library imports
 import sys
 import os
+
+from TableDetection import luminositybased
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 from pathlib import Path
 import logging
@@ -643,19 +645,35 @@ class OCRWorker(QThread):
             self.ocr_error.emit(f"Critical error: {e}")
     
 
-    def _merge_user_lines(self, auto_TableMap, image_list):
+    def _merge_user_lines(self, auto_TableMap, user_lines, image_list):
+        """
+        Merges manual lines with automatically detected lines.
+
+        :param auto_TableMap: List of [auto_horizontal, auto_vertical] for each image.
+        :param user_lines: Dictionary mapping image filenames to manual lines.
+        :param image_list: List of image file paths.
+        :return: List of [combined_horizontal, combined_vertical] for each image.
+        """
         combined_TableMap = []
-        for image, auto_map in zip(image_list, auto_TableMap):
-            user_lines = self.user_lines.get(image, [])
-            user_columns = [line for line, orientation in user_lines if orientation == 'vertical']
-            user_rows = [line for line, orientation in user_lines if orientation == 'horizontal']
-            combined_columns = auto_map[0] + user_columns
-            combined_rows = auto_map[1] + user_rows
-            combined_TableMap.append([combined_columns, combined_rows])
+        for image_path, auto_map in zip(image_list, auto_TableMap):
+            image_filename = os.path.basename(image_path)
+            manual = user_lines.get(image_filename, {'horizontal': [], 'vertical': []})
+            
+            # Merge horizontal lines
+            combined_horizontal = auto_map[0] + manual['horizontal']
+            combined_horizontal = sorted(set(combined_horizontal))
+            
+            # Merge vertical lines
+            combined_vertical = auto_map[1] + manual['vertical']
+            combined_vertical = sorted(set(combined_vertical))
+            
+            combined_TableMap.append([combined_horizontal, combined_vertical])
+            
             self.logger.debug(
-                f"Merged {len(user_columns)} user columns and {len(user_rows)} user rows "
-                f"with {len(auto_map[0])} auto columns and {len(auto_map[1])} auto rows for image {image}."
+                f"Merged {len(manual['horizontal'])} manual horizontal and {len(manual['vertical'])} manual vertical "
+                f"lines with {len(auto_map[0])} auto horizontal and {len(auto_map[1])} auto vertical lines for image {image_filename}."
             )
+        
         return combined_TableMap
 
     # def _merge_user_lines(self, auto_TableMap, image_list):
@@ -1503,7 +1521,36 @@ class OCRApp(QMainWindow):
     SUPPORTED_IMAGE_FORMATS = {'.png', '.jpg', '.jpeg'}
     SUPPORTED_PDF_FORMATS = {'.pdf'}
     logger = logging.getLogger(__name__)
+    def _merge_user_lines(self, auto_TableMap, user_lines, image_list):
+        """
+        Merges manual lines with automatically detected lines.
 
+        :param auto_TableMap: List of [auto_horizontal, auto_vertical] for each image.
+        :param user_lines: Dictionary mapping image filenames to manual lines.
+        :param image_list: List of image file paths.
+        :return: List of [combined_horizontal, combined_vertical] for each image.
+        """
+        combined_TableMap = []
+        for image_path, auto_map in zip(image_list, auto_TableMap):
+            image_filename = os.path.basename(image_path)
+            manual = user_lines.get(image_filename, {'horizontal': [], 'vertical': []})
+
+            # Merge horizontal lines
+            combined_horizontal = auto_map[0] + manual['horizontal']
+            combined_horizontal = sorted(set(combined_horizontal))
+
+            # Merge vertical lines
+            combined_vertical = auto_map[1] + manual['vertical']
+            combined_vertical = sorted(set(combined_vertical))
+
+            combined_TableMap.append([combined_horizontal, combined_vertical])
+
+            self.logger.debug(
+                f"Merged {len(manual['horizontal'])} manual horizontal and {len(manual['vertical'])} manual vertical "
+                f"lines with {len(auto_map[0])} auto horizontal and {len(auto_map[1])} auto vertical lines for image {image_filename}."
+            )
+        
+        return combined_TableMap
     def __init__(self):
         super().__init__()
 
@@ -2363,18 +2410,44 @@ class OCRApp(QMainWindow):
 
     def get_user_lines_for_pages(self, selected_pages):
         """
-        Retrieves user-defined lines for the selected pages from PDFGraphicsView.
+        Retrieves user-defined lines for the selected pages from the GUI.
+        Converts QLineF objects to numerical positions.
 
         :param selected_pages: List of zero-based page indices.
-        :return: Dictionary mapping image filenames to their respective lines.
+        :return: Dictionary mapping image filenames to their respective manual lines.
         """
         user_lines = {}
         for page_index in selected_pages:
             if 0 <= page_index < len(self.image_file_paths):
                 image_filename = os.path.basename(self.image_file_paths[page_index])
-                lines = self.graphics_view.get_lines_for_image(image_filename)
-                user_lines[image_filename] = lines
+                lines = self.graphics_view.get_lines_for_image(image_filename)  # Returns list of (QLineF, orientation)
+                
+                manual_horizontal = []
+                manual_vertical = []
+                
+                for line, orientation in lines:
+                    if orientation == 'horizontal':
+                        # Extract y-coordinate (average of y1 and y2)
+                        y = (line.y1() + line.y2()) / 2
+                        y = round(y, 2)  # Optional: Round for precision
+                        manual_horizontal.append(y)
+                        self.logger.debug(f"User added horizontal line: y={y}")
+                    elif orientation == 'vertical':
+                        # Extract x-coordinate (average of x1 and x2)
+                        x = (line.x1() + line.x2()) / 2
+                        x = round(x, 2)  # Optional: Round for precision
+                        manual_vertical.append(x)
+                        self.logger.debug(f"User added vertical line: x={x}")
+                    else:
+                        self.logger.warning(f"Unknown orientation: {orientation}")
+                
+                user_lines[image_filename] = {
+                    'horizontal': manual_horizontal,
+                    'vertical': manual_vertical
+                }
+                self.logger.debug(f"User lines for {image_filename}: {user_lines[image_filename]}")
         return user_lines
+
 
     def change_page(self, current_item, previous_item):
         """Handle page changes when a different page is selected from the project list."""
@@ -2924,142 +2997,173 @@ class OCRApp(QMainWindow):
         finally:
             self.run_ocr_action.setEnabled(True)
             self.logger.debug("Run OCR button re-enabled after initialization attempt.")
-
+    
     def run_ocr(self, selected_pages=None):
-        """
-        Initiates the OCR process by setting up necessary parameters,
-        initializing the OCRWorker thread, and handling user interactions.
-
-        :param selected_pages: Optional list of page indices (zero-based) to process. If None, all pages are processed.
-        """
-        # Check if OCR engines are initialized
-        if not self.ocr_initialized:
-            self.initialize_ocr_engines()
-
-        # Validate OCR engines
-        if not self.ocr_initialized:
-            self.show_error_message('Failed to initialize OCR engines.')
-            self.logger.error('OCR engines not initialized.')
-            return
-        
-        self.logger.debug(f"Received user_lines: {self.user_lines}")
-
-        # Validate PDF file path
-        if not self.current_pdf_path or not os.path.exists(self.current_pdf_path):
-            self.show_error_message('Invalid or missing PDF file path.')
-            self.logger.error('Invalid or missing PDF file path.')
-            return
-
-        if selected_pages is None:
-            # If no specific pages are selected, process all pages
-            self.logger.debug(f"Length of self.pil_images: {len(self.pil_images)}")
-            selected_pages = list(range(len(self.pil_images)))
-
-        # Ensure selected_pages is a list
-        if not isinstance(selected_pages, list):
-            self.logger.error(f"selected_pages is not a list: {selected_pages}, type: {type(selected_pages)}")
-            self.show_error_message('Invalid page selection.')
-            return
-
-        # Ensure selected_pages is not empty
-        self.logger.debug(f"Selected pages: {selected_pages}, type: {type(selected_pages)}")
-        if not selected_pages:
-            self.show_error_message('No pages selected for OCR.')
-            self.logger.error('No pages selected for OCR.')
-            return
-
-        self.status_bar.showMessage('Running OCR...', 5000)
-        QApplication.processEvents()
-
-        # Save current rectangles and lines (Assuming these methods are defined elsewhere)
-        self.save_current_rectangles()
-        self.graphics_view.save_lines()
-
-
-        # Initialize the progress bar
-        if not self.progress_bar:
-            self.progress_bar = QProgressBar()
-            self.progress_bar.setMaximum(len(selected_pages))
-            self.progress_bar.setValue(0)
-            self.status_bar.addPermanentWidget(self.progress_bar)
-        else:
-            self.progress_bar.setMaximum(len(selected_pages))
-            self.progress_bar.setValue(0)
-            self.progress_bar.show()  # Ensure it's visible
-
-        self.ocr_cancel_event = threading.Event()
-
-        # Update the OCR action button to allow cancellation
-        self.run_ocr_action.setText('Cancel OCR')
-        self.ocr_running = True
-
-        # Set up directories and output paths
-        storedir = os.path.abspath("temp_gui")
-        os.makedirs(storedir, exist_ok=True)
-        output_csv = os.path.join(self.project_folder, "ocr_results.csv")
-
-        # Retrieve the PDFGraphicsView instance
-        pdf_graphics_view = self.findChild(PDFGraphicsView)
-        if not pdf_graphics_view:
-            self.show_error_message('Failed to locate PDFGraphicsView.')
-            self.logger.error('PDFGraphicsView instance not found.')
-            return
-
-        # Use existing image paths
-        self.logger.info("Preparing image list for OCR.")
-        image_list = []
-        for page_index in selected_pages:
-            image_path = self.image_file_paths[page_index]
-            if not os.path.exists(image_path):
-                self.logger.error(f"Image file does not exist: {image_path}")
-                self.show_error_message(f"Image file does not exist: {image_path}")
+            """
+            Initiates the OCR process by setting up necessary parameters,
+            merging manual lines with automatic ones, initializing the OCRWorker thread,
+            and handling user interactions.
+    
+            :param selected_pages: Optional list of page indices (zero-based) to process. If None, all pages are processed.
+            """
+            # Check if OCR engines are initialized
+            if not self.ocr_initialized:
+                self.initialize_ocr_engines()
+    
+            # Validate OCR engines
+            if not self.ocr_initialized:
+                self.show_error_message('Failed to initialize OCR engines.')
+                self.logger.error('OCR engines not initialized.')
                 return
-            image_list.append(image_path)
-
-
-        # Retrieve user-added lines from PDFGraphicsView
-        user_lines = self.get_user_lines_for_pages(selected_pages)
-
-        # Validate user_lines structure
-        for image, lines in user_lines.items():
-            self.logger.debug(f"Processing image: {image}")
-            self.logger.debug(f"Lines: {lines}")
-            for line, orientation in lines:
-                if not isinstance(line, QLineF):
-                    self.logger.error(f"Invalid line object in {image}: {line}")
-                    self.show_error_message(f"Invalid line object in {image}.")
+            
+            self.logger.debug(f"Received user_lines: {self.user_lines}")
+    
+            # Validate PDF file path
+            if not self.current_pdf_path or not os.path.exists(self.current_pdf_path):
+                self.show_error_message('Invalid or missing PDF file path.')
+                self.logger.error('Invalid or missing PDF file path.')
+                return
+    
+            if selected_pages is None:
+                # If no specific pages are selected, process all pages
+                self.logger.debug(f"Length of self.pil_images: {len(self.pil_images)}")
+                selected_pages = list(range(len(self.pil_images)))
+    
+            # Ensure selected_pages is a list
+            if not isinstance(selected_pages, list):
+                self.logger.error(f"selected_pages is not a list: {selected_pages}, type: {type(selected_pages)}")
+                self.show_error_message('Invalid page selection.')
+                return
+    
+            # Ensure selected_pages is not empty
+            self.logger.debug(f"Selected pages: {selected_pages}, type: {type(selected_pages)}")
+            if not selected_pages:
+                self.show_error_message('No pages selected for OCR.')
+                self.logger.error('No pages selected for OCR.')
+                return
+    
+            self.status_bar.showMessage('Running OCR...', 5000)
+            QApplication.processEvents()
+    
+            # Save current rectangles and lines (Assuming these methods are defined elsewhere)
+            self.save_current_rectangles()
+            self.graphics_view.save_lines()
+    
+            # Initialize the progress bar
+            if not self.progress_bar:
+                self.progress_bar = QProgressBar()
+                self.progress_bar.setMaximum(len(selected_pages))
+                self.progress_bar.setValue(0)
+                self.status_bar.addPermanentWidget(self.progress_bar)
+            else:
+                self.progress_bar.setMaximum(len(selected_pages))
+                self.progress_bar.setValue(0)
+                self.progress_bar.show()  # Ensure it's visible
+    
+            self.ocr_cancel_event = threading.Event()
+    
+            # Update the OCR action button to allow cancellation
+            self.run_ocr_action.setText('Cancel OCR')
+            self.ocr_running = True
+    
+            # Set up directories and output paths
+            storedir = os.path.abspath("temp_gui")
+            os.makedirs(storedir, exist_ok=True)
+            output_csv = os.path.join(self.project_folder, "ocr_results.csv")
+    
+            # Retrieve the PDFGraphicsView instance
+            pdf_graphics_view = self.findChild(PDFGraphicsView)
+            if not pdf_graphics_view:
+                self.show_error_message('Failed to locate PDFGraphicsView.')
+                self.logger.error('PDFGraphicsView instance not found.')
+                return
+    
+            # Use existing image paths
+            self.logger.info("Preparing image list for OCR.")
+            image_list = []
+            for page_index in selected_pages:
+                image_path = self.image_file_paths[page_index]
+                if not os.path.exists(image_path):
+                    self.logger.error(f"Image file does not exist: {image_path}")
+                    self.show_error_message(f"Image file does not exist: {image_path}")
+                    return
+                image_list.append(image_path)
+    
+            # Detect tables automatically
+            auto_TableMap = []
+            for image_path in image_list:
+                try:
+                    auto_map = luminositybased.findTable(
+                        image_path=image_path,
+                        HorizontalState="border",
+                        VerticalState="border",
+                        horizontalgap_ratio=17/2077,
+                        verticalgap_ratio=80/1474
+                    )
+                    auto_TableMap.append(auto_map)
+                    self.logger.debug(f"Automatic TableMap for {image_path}: {auto_map}")
+                except Exception as e:
+                    self.logger.error(f"Error detecting tables in image {image_path}: {e}")
+                    self.show_error_message(f"Table detection failed for {image_path}: {e}")
+                    continue  # Skip to the next image
+                
+            # Get user-added lines
+            user_lines = self.get_user_lines_for_pages(selected_pages)
+            self.logger.debug(f"User-added lines: {user_lines}")
+    
+            # Validate user_lines structure
+            for image, lines in user_lines.items():
+                self.logger.debug(f"Processing image: {image}")
+                self.logger.debug(f"Lines: {lines}")
+                # 'lines' is expected to be a dict with 'horizontal' and 'vertical' lists
+                if not isinstance(lines, dict):
+                    self.logger.error(f"Lines for {image} should be a dict with 'horizontal' and 'vertical' keys.")
+                    self.show_error_message(f"Invalid lines structure for {image}.")
                     continue
-                if orientation not in ['horizontal', 'vertical']:
-                    self.logger.error(f"Invalid orientation '{orientation}' in {image}.")
-                    self.show_error_message(f"Invalid orientation '{orientation}' in {image}.")
+                if 'horizontal' not in lines or 'vertical' not in lines:
+                    self.logger.error(f"Lines for {image} missing 'horizontal' or 'vertical' keys.")
+                    self.show_error_message(f"Invalid lines structure for {image}.")
                     continue
+                for y in lines['horizontal']:
+                    if not isinstance(y, (float, int)):
+                        self.logger.error(f"Invalid horizontal line position in {image}: {y}")
+                        self.show_error_message(f"Invalid horizontal line position in {image}.")
+                for x in lines['vertical']:
+                    if not isinstance(x, (float, int)):
+                        self.logger.error(f"Invalid vertical line position in {image}: {x}")
+                        self.show_error_message(f"Invalid vertical line position in {image}.")
+    
+            self.logger.debug(f"Final user_lines to be passed to OCRWorker: {user_lines}")
+    
+            # Merge user and automatic lines
+            combined_TableMap = self._merge_user_lines(auto_TableMap, user_lines, image_list)
+            self.logger.debug(f"Combined TableMap: {combined_TableMap}")
+    
+            # Instantiate the OCRWorker thread with combined_TableMap
+            self.ocr_worker = OCRWorker(
+                pdf_file=self.current_pdf_path,
+                storedir=storedir,
+                output_csv=output_csv,
+                ocr_cancel_event=self.ocr_cancel_event,
+                ocr_engine=self.ocr_engine,
+                easyocr_engine=self.easyocr_engine,
+                combined_TableMap=combined_TableMap,  # Pass the combined_TableMap here
+                image_list=image_list
+            )
+            # Connect OCRWorker signals to respective slots
+            self.ocr_worker.ocr_progress.connect(self.on_ocr_progress)
+            self.ocr_worker.ocr_time_estimate.connect(self.update_remaining_time_label)
+            self.ocr_worker.ocr_completed.connect(self.on_ocr_completed)
+            self.ocr_worker.ocr_error.connect(self.on_ocr_error)
+    
+            # Start the OCRWorker thread
+            self.ocr_worker.start()
+            self.logger.info("OCRWorker thread started.")
+    
+            # Update the OCR action button to allow cancellation
+            self.run_ocr_action.triggered.disconnect(self.run_ocr)
+            self.run_ocr_action.triggered.connect(self.cancel_ocr)
 
-        self.logger.debug(f"Final user_lines to be passed to OCRWorker: {user_lines}")
-
-        # Instantiate the OCRWorker thread with user_lines
-        self.ocr_worker = OCRWorker(
-            pdf_file=self.current_pdf_path,
-            storedir=storedir,
-            output_csv=output_csv,
-            ocr_cancel_event=self.ocr_cancel_event,
-            ocr_engine=self.ocr_engine,
-            easyocr_engine=self.easyocr_engine,
-            user_lines=user_lines,  # Pass the user_lines here
-            image_list=image_list
-        )
-        # Connect OCRWorker signals to respective slots
-        self.ocr_worker.ocr_progress.connect(self.on_ocr_progress)
-        self.ocr_worker.ocr_time_estimate.connect(self.update_remaining_time_label)
-        self.ocr_worker.ocr_completed.connect(self.on_ocr_completed)
-        self.ocr_worker.ocr_error.connect(self.on_ocr_error)
-
-        # Start the OCRWorker thread
-        self.ocr_worker.start()
-        self.logger.info("OCRWorker thread started.")
-
-        # Update the OCR action button to allow cancellation
-        self.run_ocr_action.triggered.disconnect(self.run_ocr)
-        self.run_ocr_action.triggered.connect(self.cancel_ocr)
 
     def run_ocr_on_selected_pages(self):
         """Initiate OCR on user-selected pages."""
@@ -3130,13 +3234,45 @@ class OCRApp(QMainWindow):
             self.show_error_message(f"Invalid page selection format: {e}")
             return []
 
+
     def get_user_lines_for_pages(self, selected_pages):
+        """
+        Retrieves user-defined lines for the selected pages from the GUI.
+        Converts QLineF objects to numerical positions.
+
+        :param selected_pages: List of zero-based page indices.
+        :return: Dictionary mapping image filenames to their respective manual lines.
+        """
         user_lines = {}
         for page_index in selected_pages:
             if 0 <= page_index < len(self.image_file_paths):
                 image_filename = os.path.basename(self.image_file_paths[page_index])
-                lines = self.lines.get(image_filename, [])
-                user_lines[image_filename] = lines
+                lines = self.graphics_view.get_lines_for_image(image_filename)  # Returns list of (QLineF, orientation)
+                
+                manual_horizontal = []
+                manual_vertical = []
+                
+                for line, orientation in lines:
+                    if orientation == 'horizontal':
+                        # Extract y-coordinate (average of y1 and y2)
+                        y = (line.y1() + line.y2()) / 2
+                        y = round(y, 2)  # Optional: Round for precision
+                        manual_horizontal.append(y)
+                        self.logger.debug(f"User added horizontal line: y={y}")
+                    elif orientation == 'vertical':
+                        # Extract x-coordinate (average of x1 and x2)
+                        x = (line.x1() + line.x2()) / 2
+                        x = round(x, 2)  # Optional: Round for precision
+                        manual_vertical.append(x)
+                        self.logger.debug(f"User added vertical line: x={x}")
+                    else:
+                        self.logger.warning(f"Unknown orientation: {orientation}")
+                
+                user_lines[image_filename] = {
+                    'horizontal': manual_horizontal,
+                    'vertical': manual_vertical
+                }
+                self.logger.debug(f"User lines for {image_filename}: {user_lines[image_filename]}")
         return user_lines
 
     def save_cropped_image(self, cropped_image, crop_rect):

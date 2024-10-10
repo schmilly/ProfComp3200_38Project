@@ -135,12 +135,46 @@ def detect_tables_in_images(image_list):
         TableMap.append(FormattedCoords)
     return TableMap
 
-def cellularize_images(image_list, TableMap, page_num=0):
-    """Splits the images into cells based on detected table coordinates."""
-    locationlists = []
-    for index, Table in enumerate(TableMap):
-        locationlists.append(cellularize_Page_colrow(image_list[index], Table[1], Table[0], page_num + index))
-    return locationlists
+# In RunThroughTest.py or relevant module
+
+def cellularize_images(image_list, combined_TableMap):
+    """
+    Splits images into cells based on combined horizontal and vertical lines.
+
+    :param image_list: List of image file paths.
+    :param combined_TableMap: List of [horizontal_lines, vertical_lines] for each image.
+    :return: List of cell regions for each image.
+    """
+    cell_regions = []
+    
+    for image_path, table_map in zip(image_list, combined_TableMap):
+        horizontal_lines, vertical_lines = table_map
+        image = Image.open(image_path)
+        wid, hgt = image.size
+        
+        # Define cell boundaries based on lines
+        # Assuming lines are sorted
+        y_lines = [0] + horizontal_lines + [hgt]
+        x_lines = [0] + vertical_lines + [wid]
+        
+        cells = []
+        for i in range(len(y_lines) - 1):
+            for j in range(len(x_lines) - 1):
+                left = x_lines[j]
+                upper = y_lines[i]
+                right = x_lines[j + 1]
+                lower = y_lines[i + 1]
+                cell = (left, upper, right, lower)
+                cells.append(cell)
+                # Optionally crop and save cell images
+                # cell_image = image.crop(cell)
+                # cell_image.save(f"{image_path}_cell_{i}_{j}.png")
+        
+        cell_regions.append(cells)
+        # Logging the number of cells created for the image
+    
+    return cell_regions
+
 
 def process_all_images(all_filenames, ocr, reader, progress_callback=None):
     """Processes all cell images and collects results."""

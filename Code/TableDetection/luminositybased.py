@@ -82,32 +82,77 @@ def draw_vertical_lines(image, lines):
 
 
 
-def findTable(image_path="Image/Path/here",HorizontalState = "border",VerticalState = "border",horizontalgap = 17/2077, verticalgap = 80/1474):
+from PIL import Image
 
-    #Gap between peaks/troughs before consider new peak/trough
+def findTable(
+    image_path,
+    HorizontalState="border",
+    VerticalState="border",
+    horizontalgap_ratio=17/2077,
+    verticalgap_ratio=80/1474,
+    manual_horizontal_lines=None,
+    manual_vertical_lines=None
+):
+    """
+    Detects tables in an image by finding horizontal and vertical lines.
+    Merges manual lines with automatically detected ones.
 
+    :param image_path: Path to the image file.
+    :param HorizontalState: Mode for horizontal line detection ("border" or other).
+    :param VerticalState: Mode for vertical line detection ("border" or other).
+    :param horizontalgap_ratio: Ratio to determine the gap for horizontal lines.
+    :param verticalgap_ratio: Ratio to determine the gap for vertical lines.
+    :param manual_horizontal_lines: List of manual horizontal line positions (y-coordinates).
+    :param manual_vertical_lines: List of manual vertical line positions (x-coordinates).
+    :return: List containing two lists: [horizontal_lines, vertical_lines].
+    """
+    # Open the image
     image = Image.open(image_path)
-    # Process image
     wid, hgt = image.size
 
+    # Calculate luminosity (assuming this function is defined)
     luminosity = calculate_luminosity(image)
-    if (HorizontalState == "border"):
-        Horizontal = find_peaks(1,luminosity,round(hgt*horizontalgap))
+
+    # Detect automatic horizontal lines
+    if HorizontalState == "border":
+        auto_horizontal = find_peaks(1, luminosity, round(hgt * horizontalgap_ratio))
+        
     else:
-        Horizontal = find_troughs(1,luminosity,round(hgt*horizontalgap)) 
-    if (VerticalState == "border"):
-        Vertical = find_peaks(0,luminosity,round(wid*verticalgap))
+        auto_horizontal = find_troughs(1, luminosity, round(hgt * horizontalgap_ratio))
+
+
+    # Detect automatic vertical lines
+    if VerticalState == "border":
+        auto_vertical = find_peaks(1, luminosity, round(wid * verticalgap_ratio)
+        )
     else:
-        Vertical = find_troughs(0,luminosity,round(wid*verticalgap)) 
+        auto_vertical = find_troughs(1, luminosity, round(wid * verticalgap_ratio)
+        )
+
+    # Merge manual lines with automatic lines
+    combined_horizontal = auto_horizontal.copy()
+    combined_vertical = auto_vertical.copy()
+
+    if manual_horizontal_lines:
+        combined_horizontal.extend(manual_horizontal_lines)
     
+    if manual_vertical_lines:
+        combined_vertical.extend(manual_vertical_lines)
+    
+    # Remove duplicates and sort
+    combined_horizontal = sorted(set(combined_horizontal))
+    combined_vertical = sorted(set(combined_vertical))
 
-    result_image = draw_lines(image, Horizontal) 
-    final_image = draw_vertical_lines(image, Vertical)
+    # Draw lines on the image (optional for visualization)
+    result_image = draw_lines(image, combined_horizontal)
+    final_image = draw_vertical_lines(result_image, combined_vertical)
 
-    #final_image.save('output_image_with_lines.png')
-    #final_image.show()
+    # Save or display the final image if needed
+    # final_image.save('output_image_with_lines.png')
+    # final_image.show()
 
-    return [Horizontal,Vertical]
+    return [combined_horizontal, combined_vertical]
+
 
 def convert_to_pairs(lst):
     # Create a list of lists where each sublist contains two consecutive elements
